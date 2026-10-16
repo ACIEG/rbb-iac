@@ -55,10 +55,14 @@ locals {
     }
   ]
 
+  # UDP (discovery) só onde o roteiro manda (passo 9): boots e observer-boots. Validators, writers e
+  # observers rodam com discovery desligado; abrir UDP neles não é recomendado.
+  p2p_udp = contains(["boot", "observer-boot"], var.node.type)
+
   besu_rules = local.is_besu ? concat(
     flatten([
-      for cidr in local.p2p_cidrs : [
-        {
+      for cidr in local.p2p_cidrs : concat(
+        [{
           key         = "p2p-tcp-${cidr}"
           description = "Besu P2P RLPx TCP"
           direction   = "ingress"
@@ -66,8 +70,8 @@ locals {
           port_min    = var.node.p2p_port
           port_max    = var.node.p2p_port
           cidr        = cidr
-        },
-        {
+        }],
+        local.p2p_udp ? [{
           key         = "p2p-udp-${cidr}"
           description = "Besu P2P discovery UDP"
           direction   = "ingress"
@@ -75,8 +79,8 @@ locals {
           port_min    = var.node.p2p_port
           port_max    = var.node.p2p_port
           cidr        = cidr
-        },
-      ]
+        }] : []
+      )
     ]),
     [
       for cidr in local.rpc_cidrs : {

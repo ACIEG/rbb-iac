@@ -140,6 +140,10 @@ run "firewall_por_papel" {
     error_message = "P2P (UDP) do boot deve aceitar a VPC (nós internos) e os boots/writers parceiros."
   }
   assert {
+    condition     = length([for r in module.node_config["validator01"].firewall_rules : r if r.port_min == 30303 && r.protocol == "udp"]) == 0 && length([for r in module.node_config["writer01"].firewall_rules : r if r.protocol == "udp"]) == 0
+    error_message = "UDP (discovery) só em boot e observer-boot; validator e writer apenas TCP."
+  }
+  assert {
     condition     = tolist(sort([for r in module.node_config["observer-boot01"].firewall_rules : r.cidr if r.port_min == 30303 && r.protocol == "tcp"])) == tolist(["0.0.0.0/0", "10.120.0.0/16"])
     error_message = "observer-boot continua público (e aceita a VPC)."
   }

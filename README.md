@@ -17,7 +17,7 @@ Para cada ambiente, com a topologia padrão de **partícipe associado**:
 
 | Nó | Tipo | IP público | P2P (30303 tcp/udp) | RPC 8545 | Métricas 9545 | Volume |
 |---|---|---|---|---|---|---|
-| `boot01` | boot | sim | boots e writers de parceiros das outras organizações | VPC | VPC | 400 GB |
+| `boot01` | boot | sim | boots e writers de parceiros das outras organizações (TCP e UDP) | VPC | VPC | 400 GB |
 | `validator01` | validator | sim | validators das outras organizações | VPC | VPC | 400 GB |
 | `writer01` | writer | sim (só SSH) | **somente VPC** (endereço anunciado = IP interno) | VPC + `rpc_cidrs` | VPC | 400 GB |
 | `observer-boot01` | observer-boot | sim | internet (0.0.0.0/0) | VPC (ou público com `rpc_public`) | VPC | 400 GB |
@@ -25,6 +25,8 @@ Para cada ambiente, com a topologia padrão de **partícipe associado**:
 | `prometheus01` | prometheus | sim | — | 8443 `/federate` (NGINX mTLS) para os Prometheus das outras organizações; 443 UI (senha) para admins; 9090 VPC | — | — |
 
 As origens permitidas vêm de `network/participants.json` (IPs reais dos nós ativos das outras organizações, gerados a partir do `nodes.json`), exatamente como o passo 9 do roteiro pede. Com `firewall_from_participants = false` volta-se ao fallback `participant_cidrs` (padrão: qualquer origem). Sempre que outra organização entrar ou trocar de IP, rode `make sync` e `tofu apply` de novo.
+
+UDP na porta P2P (discovery) só é aberto em boot e observer-boot, como pede o passo 9 do roteiro; validator, writer e observer aceitam apenas TCP.
 
 Além disso: VPC, subnet pool, sub-rede com IPs privados fixos e estáveis (derivados do tipo e do sequencial: boot01 = .11, validator01 = .21, writer01 = .31, observer-boot01 = .41, observer01 = .51, prometheus01 = .61; adicionar ou remover um nó nunca muda o IP dos outros), um security group por nó (regras padrão da Magalu desabilitadas), chave SSH, IPs públicos gerenciados, volumes de dados criptografados (com `prevent_destroy` em mainnet) e NAT gateway quando algum nó fica sem IP público.
 
