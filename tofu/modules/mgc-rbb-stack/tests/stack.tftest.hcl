@@ -89,8 +89,8 @@ run "topologia_associado" {
     error_message = "Prometheus deve coletar os 5 nós Besu (incluindo o observer)."
   }
   assert {
-    condition     = output.nodes["observer01"].p2p_public == false && tolist([for r in module.node_config["observer01"].firewall_rules : r.cidr if r.port_min == 30303]) == tolist(["10.120.0.0/16", "10.120.0.0/16"])
-    error_message = "Observer interno: P2P só na VPC (tcp+udp)."
+    condition     = output.nodes["observer01"].p2p_public == false && tolist([for r in module.node_config["observer01"].firewall_rules : r.cidr if r.port_min == 30303]) == tolist(["10.120.0.0/16"])
+    error_message = "Observer interno: P2P só na VPC e só TCP (discovery desligado)."
   }
   assert {
     condition     = module.node_config["observer01"].archive_env["BESU_DATA_STORAGE_FORMAT"] == "FOREST" && module.node_config["observer01"].archive_env["BESU_SYNC_MODE"] == "FULL"
