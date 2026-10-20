@@ -44,7 +44,14 @@ node_host() {
   nodes_json "$1" | jq -r --arg n "$2" '.[$n] | (.public_ip // .private_ip)'
 }
 
-bastion_ip() { (cd "$(env_dir "$1")" && tofu output -raw bastion_ip 2>/dev/null) || true; }
+_BASTION_CACHE=""; _BASTION_SET=false
+bastion_ip() {
+  # Cacheia: 'tofu output' consulta o backend remoto e era chamado a cada ssh para nós privados
+  if ! ${_BASTION_SET}; then
+    _BASTION_CACHE="$( (cd "$(env_dir "$1")" && tofu output -raw bastion_ip 2>/dev/null) || true)"; _BASTION_SET=true
+  fi
+  printf '%s' "${_BASTION_CACHE}"
+}
 
 # Opções de salto quando o nó não tem IP público
 node_jump_opts() {
