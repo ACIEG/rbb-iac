@@ -92,7 +92,8 @@
        }
       ]
      },
-     "mappings": []
+     "mappings": [],
+     "unit": "locale"
     },
     "overrides": []
    }
@@ -162,7 +163,8 @@
        }
       ]
      },
-     "mappings": []
+     "mappings": [],
+     "unit": "locale"
     },
     "overrides": []
    }
@@ -283,7 +285,8 @@
       "lineWidth": 2,
       "fillOpacity": 8,
       "showPoints": "never"
-     }
+     },
+     "unit": "locale"
     },
     "overrides": []
    }
@@ -462,7 +465,7 @@
    "id": 10,
    "type": "stat",
    "title": "Alertas disparados",
-   "description": "Alertas do Prometheus ativos agora, por nome. Vazio = tudo certo.",
+   "description": "Alertas do NOSSO Prometheus ativos agora, por nome (os alertas dos parceiros chegam pela federação e ficam de fora). Vazio = tudo certo.",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -479,7 +482,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "sum by (alertname) (ALERTS{alertstate=\"firing\"})",
+     "expr": "sum by (alertname) (ALERTS{alertstate=\"firing\", job!=\"rbb-federado\"})",
      "refId": "A",
      "legendFormat": "{{alertname}}",
      "instant": true,
