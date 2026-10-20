@@ -32,6 +32,10 @@ write_files:
     permissions: "0755"
     encoding: gz+b64
     content: ${cli_b64}
+  - path: /usr/local/bin/rbb-peers-exporter
+    permissions: "0755"
+    encoding: gz+b64
+    content: ${exporter_b64}
 %{ if genesis_b64 != null ~}
   - path: /etc/rbb/genesis.json
     permissions: "0644"

@@ -252,9 +252,31 @@ start_node() {
 /usr/local/bin/rbb-node jfr-clean >/dev/null 2>&1
 CRON
   chmod 0755 /etc/cron.hourly/rbb-jfr-clean
+  install_peers_exporter
   # Vigia de peers: a cada 5 min; reinicia o Besu se ficar sem peers em 2 verificações seguidas (ver rbb-node watchdog)
   printf '*/5 * * * * root /usr/local/bin/rbb-node watchdog >/dev/null 2>&1\n' > /etc/cron.d/rbb-watchdog
   chmod 0644 /etc/cron.d/rbb-watchdog
+}
+
+# Exportador de peers/disco/memória (porta 9546, só VPC) para o Prometheus da organização.
+# O arquivo /usr/local/bin/rbb-peers-exporter vem do cloud-init (ou do rbb-update-tools.sh).
+install_peers_exporter() {
+  [[ -x /usr/local/bin/rbb-peers-exporter ]] || { log "rbb-peers-exporter ausente; pulando"; return; }
+  [[ -f /etc/rbb/peers-map.json ]] || printf '[]\n' > /etc/rbb/peers-map.json
+  cat > /etc/systemd/system/rbb-peers-exporter.service <<UNIT
+[Unit]
+Description=RBB peers/disk/memory exporter (Prometheus, porta 9546)
+After=docker.service
+[Service]
+ExecStart=/usr/bin/python3 /usr/local/bin/rbb-peers-exporter
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=multi-user.target
+UNIT
+  systemctl daemon-reload
+  systemctl enable --now rbb-peers-exporter >/dev/null 2>&1
+  systemctl restart rbb-peers-exporter
 }
 
 write_node_info() {

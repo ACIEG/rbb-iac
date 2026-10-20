@@ -35,3 +35,8 @@ output "bastion_ip" {
 output "vpc_id" {
   value = module.rbb.vpc_id
 }
+
+output "organization_name" {
+  description = "Nome da organização, como aparece no nodes.json do participantes."
+  value       = var.organization_name
+}

@@ -31,6 +31,12 @@ for b in $(nodes_of_type "${env}" observer-boot); do
   e="$(node_ssh "${env}" "${b}" sudo rbb-node enode --internal)"; own_obs_boots+=("${e}")
 done
 
+echo "== mapa de peers (IP -> organização/nó) para o exportador"
+map="$(peers_map_json "${env}")"
+for node in $(nodes_json "${env}" | jq -r 'to_entries[] | select(.value.type != "prometheus") | .key'); do
+  printf '%s' "${map}" | node_ssh "${env}" "${node}" 'cat > /tmp/peers-map.json && sudo install -m 0644 /tmp/peers-map.json /etc/rbb/peers-map.json && sudo systemctl restart rbb-peers-exporter 2>/dev/null || true'
+done
+
 changed=()
 for node in $(nodes_json "${env}" | jq -r 'keys[]'); do
   type="$(nodes_json "${env}" | jq -r --arg n "${node}" '.[$n].type')"

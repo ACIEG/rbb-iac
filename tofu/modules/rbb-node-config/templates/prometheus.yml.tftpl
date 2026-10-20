@@ -18,6 +18,17 @@ scrape_configs:
     file_sd_configs:
       - files: ["/etc/prometheus/targets/local.json"]
 
+  # Exportador rbb-peers em cada nó Besu (porta 9546): sessões P2P por organização, portas dos peers
+  # esperados, disco e memória real do contêiner. Mesmos alvos/rótulos do job rbb, trocando a porta.
+  - job_name: rbb-node
+    file_sd_configs:
+      - files: ["/etc/prometheus/targets/local.json"]
+    relabel_configs:
+      - source_labels: ["__address__"]
+        regex: "(.*):[0-9]+"
+        target_label: "__address__"
+        replacement: "$1:9546"
+
   # Job para coletar as métricas de outras organizações (Prometheus expostos via NGINX mTLS, porta 8443).
   - job_name: rbb-federado
     honor_labels: false

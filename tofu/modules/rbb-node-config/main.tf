@@ -102,6 +102,15 @@ locals {
         port_min    = var.node.metrics_port
         port_max    = var.node.metrics_port
         cidr        = var.vpc_cidr
+      },
+      {
+        key         = "exporter-vpc"
+        description = "Exportador rbb-peers (peers, disco, memoria) para o Prometheus da organizacao"
+        direction   = "ingress"
+        protocol    = "tcp"
+        port_min    = 9546
+        port_max    = 9546
+        cidr        = var.vpc_cidr
       }
     ]
   ) : []
@@ -221,6 +230,7 @@ locals {
     prometheus_nginx              = base64gzip(file("${path.module}/files/prometheus-nginx.conf"))
     prometheus_setup              = base64gzip(file("${path.module}/files/prometheus-setup.sh"))
     prometheus_docker             = base64gzip(file("${path.module}/files/prometheus-compose.yml"))
+    exporter_b64                  = base64gzip(file("${path.module}/files/rbb-peers-exporter.py"))
     prometheus_blackbox           = base64gzip(file("${path.module}/files/prometheus-blackbox.yml"))
     grafana_datasources           = base64gzip(file("${path.module}/files/grafana-datasources.yml"))
     grafana_dashboards            = base64gzip(file("${path.module}/files/grafana-dashboards.yml"))

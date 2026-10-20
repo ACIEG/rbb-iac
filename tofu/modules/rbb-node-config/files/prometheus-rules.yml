@@ -21,6 +21,35 @@ groups:
   - record: blockchain_block_generation_interval_distance_from_target:rate1m
     expr: abs(blockchain_block_generation_interval:rate1m - 4)
 
+# Saúde por papel (exportador rbb-peers, job rbb-node). 0 = saudável, 1 = atenção, 2 = problema.
+# rbb:node_health é o máximo das condições abaixo; cada rbb:health_* explica um motivo.
+- name: node health
+  rules:
+  - record: rbb:validators_connected
+    expr: count by (node) (rbb_peer_connected{peer_type="validator", own="false"}) or (rbb_node_info{role="validator"} * 0)
+  - record: rbb:validators_expected
+    expr: count by (node) (rbb_peer_expected{peer_type="validator", own="false"})
+  - record: rbb:own_peers_connected
+    expr: count by (node) (rbb_peer_connected{own="true"}) or (rbb_node_info * 0)
+  - record: rbb:partner_boots_connected
+    expr: count by (node) (rbb_peer_connected{own="false", peer_type=~"boot|writer|observer-boot"}) or (rbb_node_info{role="boot"} * 0)
+  - record: rbb:health_syncing
+    expr: max by (node) ((node_block_height_distance_from_tip{job="rbb"} > bool 10) * 2)
+  - record: rbb:health_restarted
+    expr: max by (node) (changes(process_start_time_seconds{job="rbb"}[24h]) > bool 0)
+  - record: rbb:health_validator_peers
+    expr: ((rbb:validators_connected < rbb:validators_expected * 0.67) * 2) or ((rbb:validators_connected < rbb:validators_expected) * 1) or (rbb:validators_connected * 0)
+  - record: rbb:health_own_boot
+    expr: ((rbb:own_peers_connected == bool 0) * 2) and on(node) rbb_node_info{role=~"writer|observer-boot|observer"}
+  - record: rbb:health_partner_boots
+    expr: ((rbb:partner_boots_connected == bool 0) * 2) and on(node) rbb_node_info{role="boot"}
+  - record: rbb:health_disk
+    expr: max by (node) (((rbb_disk_bytes{kind="used"} / on(node, mount) rbb_disk_bytes{kind="total"}) > bool 0.95) * 2 + ((rbb_disk_bytes{kind="used"} / on(node, mount) rbb_disk_bytes{kind="total"}) > bool 0.85))
+  - record: rbb:health_memory
+    expr: max by (node) ((rbb_besu_memory_anon_bytes / rbb_besu_memory_limit_bytes) > bool 0.9)
+  - record: rbb:node_health
+    expr: clamp_max(max by (node) ({__name__=~"rbb:health_.+"}), 2)
+
 - name: our nodes
   rules:
   - alert: BesuDown
