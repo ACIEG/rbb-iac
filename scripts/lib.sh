@@ -73,5 +73,5 @@ peers_map_json() {
   {
     [[ -f "${netdir}/nodes.json" ]] && jq -c --arg o "${org}" '[.[] | select(.organization != $o) | .organization as $org | .nodes[] | select(.ipAddresses != null) | .ipAddresses[] as $ip | {ip: $ip, organization: $org, node: .name, type: .nodeType, port: .port, own: false}]' "${netdir}/nodes.json"
     nodes_json "${env}" | jq -c --arg o "${org}" '[to_entries[] | .key as $n | .value as $v | ([$v.private_ip, $v.public_ip] | map(select(. != null and . != ""))[]) as $ip | {ip: $ip, organization: $o, node: $n, type: $v.type, port: (($v.p2p_address // "") | split(":") | .[1] // "30303" | tonumber), own: true}]'
-  } | jq -s 'add | unique_by(.ip)'
+  } | jq -s 'add | unique_by([.ip, .port])'
 }

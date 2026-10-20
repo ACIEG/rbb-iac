@@ -32,11 +32,18 @@ def rpc(method, params=None):
                                  headers={"Content-Type": "application/json"})
     return json.load(urllib.request.urlopen(req, timeout=8)).get("result")
 
+# Várias organizações publicam boot, validator e writer no MESMO IP (portas diferentes): o mapa é
+# ip -> lista de entradas; a escolha usa a porta quando conhecida (sessões de saída e peers esperados)
+# e, nas sessões de entrada (porta efêmera), o tipo que o nosso papel espera do outro lado.
+PREFER = {"validator": "validator", "boot": "boot", "writer": "boot", "observer-boot": "boot", "observer": "observer-boot"}
 def load_map():
+    m = {}
     try:
-        return {e["ip"]: e for e in json.load(open(MAP_FILE))}
+        for e in json.load(open(MAP_FILE)):
+            m.setdefault(e["ip"], []).append(e)
     except Exception:
-        return {}
+        pass
+    return m
 
 def expected_enodes():
     out = []
@@ -62,8 +69,13 @@ def port_open(host, port, timeout=3):
     except Exception:
         return 0
 
-def label(m, ip, fallback_type=""):
-    e = m.get(ip)
+def label(m, ip, port=None, fallback_type=""):
+    cands = m.get(ip) or []
+    e = None
+    if port is not None:
+        e = next((c for c in cands if int(c.get("port") or 0) == int(port)), None)
+    if e is None and cands:
+        e = next((c for c in cands if c.get("type") == PREFER.get(NTYPE)), cands[0])
     if e: return e.get("organization", "?"), e.get("node", ip), e.get("type", fallback_type), "true" if e.get("own") else "false"
     return "desconhecida", ip, fallback_type, "false"
 
@@ -95,8 +107,9 @@ def collect():
     # sessões ativas
     try:
         for p in rpc("admin_peers") or []:
-            addr = p["network"]["remoteAddress"]; ip = re.sub(r"^[^/]*/", "", addr).rsplit(":", 1)[0]
-            org, name, typ, own = label(m, ip)
+            addr = re.sub(r"^[^/]*/", "", p["network"]["remoteAddress"]); ip, rport = addr.rsplit(":", 1)
+            inbound = bool(p["network"].get("inbound"))
+            org, name, typ, own = label(m, ip, None if inbound else int(rport))
             lines.append(fmt("rbb_peer_connected", {"organization": org, "peer": name, "peer_type": typ, "direction": "inbound" if p["network"].get("inbound") else "outbound", "own": own}, 1))
     except Exception as ex:
         lines.append(f"# admin_peers falhou: {esc(ex)}")
@@ -108,7 +121,7 @@ def collect():
         except Exception: pass
         if (ip, port) in seen: continue
         seen.add((ip, port))
-        org, name, typ, own = label(m, ip)
+        org, name, typ, own = label(m, ip, port)
         lab = {"organization": org, "peer": name, "peer_type": typ, "own": own}
         lines.append(fmt("rbb_peer_expected", lab, 1))
         lines.append(fmt("rbb_peer_port_open", lab, port_open(ip, port)))
