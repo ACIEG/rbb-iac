@@ -6,10 +6,14 @@
 groups:
 - name: network metrics
   rules:
+  # Só os nossos nós (job rbb): as séries federadas dos parceiros chegam com os mesmos nomes de regra
+  # (blockchain_tip etc.) e, sem o filtro, o "max" vira duas séries e a subtração abaixo falha.
   - record: blockchain_tip
-    expr: max(ethereum_best_known_block_number)
+    expr: max(ethereum_best_known_block_number{job="rbb"})
+  # Distância do bloco PRÓPRIO do nó (blockchain_height) até a ponta conhecida; best_known_block_number
+  # é a ponta que o nó já conhece, não onde ele está, e daria zero para um nó ainda sincronizando.
   - record: node_block_height_distance_from_tip
-    expr: blockchain_tip - on() group_right() ethereum_best_known_block_number
+    expr: blockchain_tip{job=""} - on() group_right() ethereum_blockchain_height{job="rbb"}
   - record: blockchain_block_generation_rate:rate1m
     expr: quantile(0.5, rate(ethereum_best_known_block_number[1m]))
   - record: blockchain_block_generation_interval:rate1m
