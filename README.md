@@ -133,7 +133,7 @@ Em qualquer VM, como root (`sudo rbb-node`):
 | `up` / `down` / `restart` / `logs -f` / `status` | ciclo de vida do Besu |
 | `cli <args>` | executa `./rbb-cli <args>` em `/srv/rbb/start-network` |
 | `prometheus reload` (após `rbb-update-tools.sh`) | o nó prometheus traz também um blackbox exporter que sonda a porta 8443 de cada parceiro (job `federation-port`) e a aceitação do nosso certificado (job `federation-tls`), gerando os alertas `FederationFirewallClosed` e `FederationCertificateRejected` |
-| `watchdog` | a cada 5 min (cron): reenvia `admin_addPeer` para os peers de `static-nodes.json` que não estão conectados (o Besu 25.5 nem sempre volta a tentar sozinho) e reinicia o Besu se o nó ficar sem nenhum peer em duas verificações seguidas |
+| `watchdog` | a cada 5 min (cron): reenvia `admin_addPeer` para os peers de `static-nodes.json` que não estão conectados (o Besu 25.5 nem sempre volta a tentar sozinho); reinicia o Besu de forma controlada quando a memória real do contêiner passa de 93% do limite (no máximo 1x a cada 6 h, evitando a morte abrupta pelo kernel); e reinicia se o nó ficar sem nenhum peer em duas verificações seguidas |
 | `jfr-clean` | remove gravações antigas do Java Flight Recorder no `/tmp` do contêiner (o bootstrap instala um cron horário) |
 | `prometheus clients <pem>` / `prometheus federation <json>` / `prometheus reload` | nós prometheus |
 
