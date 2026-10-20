@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 1,
+ "version": 2,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -30,8 +30,8 @@
   {
    "id": 2,
    "type": "stat",
-   "title": "Distância da ponta (blocos)",
-   "description": "Quantos blocos cada nó nosso está atrás da ponta da rede. Verde = sincronizado.",
+   "title": "Saúde",
+   "description": "Por papel: validator precisa ver os outros validators; writer/observer-boot/observer precisam do boot próprio; boot precisa de boots parceiros. Também pesa sincronização, reinícios, disco e memória. Motivos nos painéis abaixo.",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -48,11 +48,117 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
+     "expr": "rbb:node_health",
+     "refId": "A",
+     "legendFormat": "{{node}}",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "observer-boot",
+      "renamePattern": "obs-boot"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "orientation": "auto",
+    "textMode": "value_and_name",
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "wideLayout": true
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       },
+       {
+        "color": "red",
+        "value": 2
+       }
+      ]
+     },
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "saudável",
+         "color": "green"
+        },
+        "1": {
+         "text": "atenção",
+         "color": "orange"
+        },
+        "2": {
+         "text": "problema",
+         "color": "red"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 3,
+   "type": "stat",
+   "title": "Distância da ponta (blocos)",
+   "description": "Blocos atrás da ponta da rede. Verde = sincronizado.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 1,
+    "w": 8,
+    "h": 5
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
      "expr": "node_block_height_distance_from_tip{job=\"rbb\"}",
      "refId": "A",
      "legendFormat": "{{node}}",
      "instant": true,
      "range": false
+    }
+   ],
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "observer-boot",
+      "renamePattern": "obs-boot"
+     }
     }
    ],
    "options": {
@@ -99,77 +205,6 @@
    }
   },
   {
-   "id": 3,
-   "type": "stat",
-   "title": "Peers conectados",
-   "description": "Sessões P2P ativas. O validator precisa ver os outros validators.",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prometheus"
-   },
-   "gridPos": {
-    "x": 8,
-    "y": 1,
-    "w": 8,
-    "h": 5
-   },
-   "targets": [
-    {
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prometheus"
-     },
-     "expr": "ethereum_peer_count{job=\"rbb\"}",
-     "refId": "A",
-     "legendFormat": "{{node}}",
-     "instant": true,
-     "range": false
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "orientation": "auto",
-    "textMode": "value_and_name",
-    "colorMode": "background",
-    "graphMode": "none",
-    "justifyMode": "center",
-    "wideLayout": true
-   },
-   "fieldConfig": {
-    "defaults": {
-     "color": {
-      "mode": "thresholds"
-     },
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "red",
-        "value": null
-       },
-       {
-        "color": "orange",
-        "value": 1
-       },
-       {
-        "color": "green",
-        "value": 3
-       }
-      ]
-     },
-     "mappings": [],
-     "unit": "locale"
-    },
-    "overrides": []
-   }
-  },
-  {
    "id": 4,
    "type": "stat",
    "title": "Reinícios do Besu (24 h)",
@@ -195,6 +230,15 @@
      "legendFormat": "{{node}}",
      "instant": true,
      "range": false
+    }
+   ],
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "observer-boot",
+      "renamePattern": "obs-boot"
+     }
     }
    ],
    "options": {
@@ -241,9 +285,9 @@
   },
   {
    "id": 5,
-   "type": "timeseries",
-   "title": "Altura dos blocos",
-   "description": "Bloco atual de cada nó. Linhas juntas = todos sincronizados.",
+   "type": "stat",
+   "title": "Validators vistos pelo nosso validator",
+   "description": "Sessões P2P com validators de outras organizações, e quantos estão na lista. Precisa de pelo menos 2/3 para participar bem do consenso.",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -251,8 +295,8 @@
    "gridPos": {
     "x": 0,
     "y": 6,
-    "w": 12,
-    "h": 8
+    "w": 6,
+    "h": 4
    },
    "targets": [
     {
@@ -260,50 +304,248 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "ethereum_blockchain_height{job=\"rbb\"}",
+     "expr": "rbb:validators_connected",
      "refId": "A",
-     "legendFormat": "{{node}}"
+     "legendFormat": "{{node}}",
+     "instant": true,
+     "range": false
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "rbb:validators_expected",
+     "refId": "B",
+     "legendFormat": "esperados",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "observer-boot",
+      "renamePattern": "obs-boot"
+     }
     }
    ],
    "options": {
-    "legend": {
-     "displayMode": "list",
-     "placement": "bottom",
-     "showLegend": true
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
     },
-    "tooltip": {
-     "mode": "multi",
-     "sort": "desc"
-    }
+    "orientation": "auto",
+    "textMode": "value_and_name",
+    "colorMode": "none",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "wideLayout": true
    },
    "fieldConfig": {
     "defaults": {
      "color": {
-      "mode": "palette-classic"
+      "mode": "thresholds"
      },
-     "custom": {
-      "lineWidth": 2,
-      "fillOpacity": 8,
-      "showPoints": "never"
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
      },
-     "unit": "locale"
+     "mappings": []
     },
     "overrides": []
    }
   },
   {
    "id": 6,
-   "type": "timeseries",
-   "title": "Memória do Besu (RSS)",
-   "description": "Memória real do processo. O limite do contêiner é 6 GiB nos nós núcleo.",
+   "type": "stat",
+   "title": "Ligação com o boot próprio",
+   "description": "writer, observer-boot e observer só falam com os nós próprios pela VPC; sem essa ligação, não recebem blocos.",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
    },
    "gridPos": {
-    "x": 12,
+    "x": 6,
     "y": 6,
-    "w": 12,
+    "w": 9,
+    "h": 4
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "clamp_max(rbb:own_peers_connected, 1)",
+     "refId": "A",
+     "legendFormat": "{{node}}",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "observer-boot",
+      "renamePattern": "obs-boot"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "orientation": "auto",
+    "textMode": "value_and_name",
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "wideLayout": true
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     },
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "sem ligação",
+         "color": "red"
+        },
+        "1": {
+         "text": "conectado",
+         "color": "green"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 7,
+   "type": "stat",
+   "title": "Boots de parceiros no nosso boot",
+   "description": "Sessões do boot01 com boots/writers de outras organizações.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 15,
+    "y": 6,
+    "w": 9,
+    "h": 4
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "rbb:partner_boots_connected",
+     "refId": "A",
+     "legendFormat": "{{node}}",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "observer-boot",
+      "renamePattern": "obs-boot"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "orientation": "auto",
+    "textMode": "value_and_name",
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "wideLayout": true
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       },
+       {
+        "color": "green",
+        "value": 3
+       }
+      ]
+     },
+     "mappings": []
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 8,
+   "type": "timeseries",
+   "title": "Memória real do Besu x limite do contêiner",
+   "description": "Memória anônima do contêiner (a que conta para o limite e para o OOM), sem cache de arquivos.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 10,
+    "w": 8,
     "h": 8
    },
    "targets": [
@@ -312,9 +554,27 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "process_resident_memory_bytes{job=\"rbb\"}",
+     "expr": "rbb_besu_memory_anon_bytes",
      "refId": "A",
      "legendFormat": "{{node}}"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "max(rbb_besu_memory_limit_bytes)",
+     "refId": "B",
+     "legendFormat": "limite do contêiner"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "observer-boot",
+      "renamePattern": "obs-boot"
+     }
     }
    ],
    "options": {
@@ -338,38 +598,26 @@
       "fillOpacity": 8,
       "showPoints": "never"
      },
+     "min": 0,
      "unit": "bytes"
     },
     "overrides": []
    }
   },
   {
-   "id": 7,
-   "type": "row",
-   "title": "Federação com as outras organizações",
-   "collapsed": false,
-   "gridPos": {
-    "x": 0,
-    "y": 14,
-    "w": 24,
-    "h": 1
-   },
-   "panels": []
-  },
-  {
-   "id": 8,
-   "type": "stat",
-   "title": "Prometheus dos parceiros (porta 8443 + nosso certificado)",
-   "description": "Por organização: porta 8443 aberta para o nosso Prometheus e NGINX aceitando o nosso certificado.",
+   "id": 9,
+   "type": "timeseries",
+   "title": "CPU do Besu",
+   "description": "Uso de CPU do processo, em % de um núcleo (as VMs têm 2 vCPU = 200%).",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
    },
    "gridPos": {
-    "x": 0,
-    "y": 15,
-    "w": 24,
-    "h": 6
+    "x": 8,
+    "y": 10,
+    "w": 8,
+    "h": 8
    },
    "targets": [
     {
@@ -377,11 +625,440 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "probe_success{job=\"federation-port\"} * 2 + on(instance) group_left(organization) (probe_http_status_code{job=\"federation-tls\"} == bool 200)",
+     "expr": "rate(process_cpu_seconds_total{job=\"rbb\"}[5m]) * 100",
+     "refId": "A",
+     "legendFormat": "{{node}}"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "observer-boot",
+      "renamePattern": "obs-boot"
+     }
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 8,
+      "showPoints": "never"
+     },
+     "min": 0,
+     "unit": "percent"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 10,
+   "type": "gauge",
+   "title": "Disco usado (volume de dados)",
+   "description": "Ocupação do volume /srv/rbb de cada nó. A cadeia cresce; acima de 85% é hora de aumentar o volume.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 10,
+    "w": 8,
+    "h": 8
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "rbb_disk_bytes{kind=\"used\", mount!=\"/\"} / on(node, mount) rbb_disk_bytes{kind=\"total\", mount!=\"/\"}",
+     "refId": "A",
+     "legendFormat": "{{node}}",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "observer-boot",
+      "renamePattern": "obs-boot"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "orientation": "auto",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit",
+     "min": 0,
+     "max": 1,
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 0.85
+       },
+       {
+        "color": "red",
+        "value": 0.95
+       }
+      ]
+     }
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 11,
+   "type": "row",
+   "title": "Alertas",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 18,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 12,
+   "type": "stat",
+   "title": "Alertas disparados",
+   "description": "Alertas do NOSSO Prometheus ativos agora, por nome. Vazio = tudo certo.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 19,
+    "w": 24,
+    "h": 4
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "sum by (alertname) (ALERTS{alertstate=\"firing\", job!=\"rbb-federado\"})",
+     "refId": "A",
+     "legendFormat": "{{alertname}}",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "observer-boot",
+      "renamePattern": "obs-boot"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "orientation": "auto",
+    "textMode": "value_and_name",
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "wideLayout": true
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     },
+     "mappings": []
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 13,
+   "type": "row",
+   "title": "$organization",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 23,
+    "w": 24,
+    "h": 1
+   },
+   "panels": [],
+   "repeat": "organization"
+  },
+  {
+   "id": 14,
+   "type": "stat",
+   "title": "Portas P2P abertas para nós",
+   "description": "Teste TCP a partir do nosso nó até o nó deles (firewall do parceiro liberado para o nosso IP?).",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 24,
+    "w": 8,
+    "h": 5
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "rbb_peer_port_open{organization=\"$organization\", own=\"false\"}",
+     "refId": "A",
+     "legendFormat": "{{node}} → {{peer}}",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "observer-boot",
+      "renamePattern": "obs-boot"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "orientation": "auto",
+    "textMode": "value_and_name",
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "wideLayout": true
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     },
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "fechada",
+         "color": "red"
+        },
+        "1": {
+         "text": "aberta",
+         "color": "green"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 15,
+   "type": "stat",
+   "title": "Sessões P2P",
+   "description": "Sessão P2P ativa entre o nosso nó e o nó deles que está na nossa lista de peers.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 8,
+    "y": 24,
+    "w": 8,
+    "h": 5
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "(rbb_peer_expected{organization=\"$organization\", own=\"false\"} and on(node, peer) rbb_peer_connected) or (rbb_peer_expected{organization=\"$organization\", own=\"false\"} * 0)",
+     "refId": "A",
+     "legendFormat": "{{node}} ↔ {{peer}}",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "observer-boot",
+      "renamePattern": "obs-boot"
+     }
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "orientation": "auto",
+    "textMode": "value_and_name",
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "wideLayout": true
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     },
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "sem sessão",
+         "color": "red"
+        },
+        "1": {
+         "text": "conectado",
+         "color": "green"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   }
+  },
+  {
+   "id": 16,
+   "type": "stat",
+   "title": "Federação do Prometheus",
+   "description": "Porta 8443 aberta para o nosso Prometheus e NGINX aceitando o nosso certificado.",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 16,
+    "y": 24,
+    "w": 8,
+    "h": 5
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "probe_success{job=\"federation-port\", organization=\"$organization\"} * 2 + on(instance) group_left(organization) (probe_http_status_code{job=\"federation-tls\", organization=\"$organization\"} == bool 200)",
      "refId": "A",
      "legendFormat": "{{organization}}",
      "instant": true,
      "range": false
+    }
+   ],
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "observer-boot",
+      "renamePattern": "obs-boot"
+     }
     }
    ],
    "options": {
@@ -447,89 +1124,35 @@
     },
     "overrides": []
    }
-  },
-  {
-   "id": 9,
-   "type": "row",
-   "title": "Alertas",
-   "collapsed": false,
-   "gridPos": {
-    "x": 0,
-    "y": 21,
-    "w": 24,
-    "h": 1
-   },
-   "panels": []
-  },
-  {
-   "id": 10,
-   "type": "stat",
-   "title": "Alertas disparados",
-   "description": "Alertas do NOSSO Prometheus ativos agora, por nome (os alertas dos parceiros chegam pela federação e ficam de fora). Vazio = tudo certo.",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prometheus"
-   },
-   "gridPos": {
-    "x": 0,
-    "y": 22,
-    "w": 24,
-    "h": 5
-   },
-   "targets": [
-    {
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prometheus"
-     },
-     "expr": "sum by (alertname) (ALERTS{alertstate=\"firing\", job!=\"rbb-federado\"})",
-     "refId": "A",
-     "legendFormat": "{{alertname}}",
-     "instant": true,
-     "range": false
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "orientation": "auto",
-    "textMode": "value_and_name",
-    "colorMode": "background",
-    "graphMode": "none",
-    "justifyMode": "center",
-    "wideLayout": true
-   },
-   "fieldConfig": {
-    "defaults": {
-     "color": {
-      "mode": "thresholds"
-     },
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "green",
-        "value": null
-       },
-       {
-        "color": "red",
-        "value": 1
-       }
-      ]
-     },
-     "mappings": []
-    },
-    "overrides": []
-   }
   }
  ],
  "templating": {
-  "list": []
+  "list": [
+   {
+    "name": "organization",
+    "label": "Organização",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "prometheus"
+    },
+    "query": {
+     "query": "label_values(rbb_peer_expected{own=\"false\"}, organization)",
+     "refId": "var"
+    },
+    "definition": "label_values(rbb_peer_expected{own=\"false\"}, organization)",
+    "refresh": 2,
+    "sort": 1,
+    "multi": true,
+    "includeAll": true,
+    "allValue": ".*",
+    "current": {
+     "text": "All",
+     "value": "$__all"
+    },
+    "hide": 2
+   }
+  ]
  },
  "annotations": {
   "list": []

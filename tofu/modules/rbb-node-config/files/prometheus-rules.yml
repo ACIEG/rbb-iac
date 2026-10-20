@@ -38,7 +38,8 @@ groups:
   - record: rbb:health_restarted
     expr: max by (node) (changes(process_start_time_seconds{job="rbb"}[24h]) > bool 0)
   - record: rbb:health_validator_peers
-    expr: ((rbb:validators_connected < rbb:validators_expected * 0.67) * 2) or ((rbb:validators_connected < rbb:validators_expected) * 1) or (rbb:validators_connected * 0)
+    # 0 = vê todos; 1 = vê menos que todos; 2 = vê menos de 2/3 (comparações com "bool" devolvem 0/1)
+    expr: clamp_max((rbb:validators_connected < bool rbb:validators_expected) + (rbb:validators_connected < bool rbb:validators_expected * 0.67), 2)
   - record: rbb:health_own_boot
     expr: ((rbb:own_peers_connected == bool 0) * 2) and on(node) max by (node) (rbb_node_info{role=~"writer|observer-boot|observer"})
   - record: rbb:health_partner_boots
