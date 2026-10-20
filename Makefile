@@ -1,7 +1,7 @@
 # Uso: make <alvo> ENV=testnet|mainnet
 ENV ?= testnet
 
-# Credenciais (Magalu, AWS do backend S3) vêm de infra/.env, carregado automaticamente se existir.
+# Credenciais (Magalu, AWS do backend S3) vêm de .env (raiz do repositório), carregado automaticamente se existir.
 ifneq (,$(wildcard .env))
 include .env
 export

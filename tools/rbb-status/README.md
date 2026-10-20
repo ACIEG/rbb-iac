@@ -3,7 +3,7 @@
 CLI em Go que mostra, do ponto de vista de um partícipe da Rede Blockchain Brasil, o estado da integração dos seus nós com a rede: quem já liberou firewall (passo 9 do roteiro de adição de nós), quem já aceita a federação do Prometheus, com quem os nós estão conectados e se os nós foram permissionados on chain.
 
 ```bash
-cd infra/tools/rbb-status && go build -o rbb-status .     # Go 1.24+
+cd tools/rbb-status && go build -o rbb-status .     # Go 1.24+
 
 rbb-status firewall --nodes lab/nodes.json --org ACIEG --role validator --ssh ubuntu@<ip do validator>
 rbb-status peers --nodes lab/nodes.json --ssh ubuntu@<ip do boot>

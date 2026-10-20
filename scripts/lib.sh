@@ -4,7 +4,7 @@ set -euo pipefail
 
 INFRA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Credenciais (Magalu, AWS do backend S3) de infra/.env, como faz o Makefile
+# Credenciais (Magalu, AWS do backend S3) de .env (raiz do repositório), como faz o Makefile
 if [[ -f "${INFRA_DIR}/.env" ]]; then
   set -a
   # shellcheck disable=SC1091

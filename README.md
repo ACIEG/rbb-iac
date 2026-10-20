@@ -52,7 +52,7 @@ As **chaves privadas dos nós são geradas na própria VM** e nunca passam pelo 
 ## Passo a passo
 
 ```bash
-cd infra/tofu/envs/testnet            # ou mainnet
+cd tofu/envs/testnet            # ou mainnet
 cp terraform.tfvars.example terraform.tfvars
 $EDITOR terraform.tfvars              # organization, ssh_public_key, admin_ssh_cidrs, ...
 export TF_VAR_mgc_api_key="<api key da Magalu Cloud>"
@@ -67,12 +67,12 @@ tofu apply tofu.tfplan
 tofu output nodes
 ```
 
-Ou, a partir de `infra/`: `make sync ORG=BNDES ENV=testnet` e `make init plan apply ENV=testnet`.
+Ou, a partir da raiz do repositório: `make sync ORG=BNDES ENV=testnet` e `make init plan apply ENV=testnet`.
 
 Aguarde alguns minutos pelo bootstrap (`/var/log/rbb-node-setup.log` em cada VM). Depois:
 
 ```bash
-cd infra
+cd rbb-iac
 ./scripts/rbb-link-nodes.sh testnet   # aplica a topologia (passo 3 do roteiro) e reinicia os nós
 ./scripts/rbb-node-info.sh testnet    # trecho para nodes.json + parâmetros de addEnode()
 ./scripts/rbb-ssh.sh testnet validator01 sudo rbb-node status
@@ -164,7 +164,7 @@ A conta de Administrador Global da organização no permissionamento da RBB repr
 - **trilha de auditoria** no CloudTrail gravada em bucket com Object Lock (retenção de 5 anos) e validação de integridade: todo uso da chave fica registrado de forma imutável.
 
 ```bash
-cd infra/tofu/envs/testnet-governance
+cd tofu/envs/testnet-governance
 cp terraform.tfvars.example terraform.tfvars      # conta, região, usuários IAM
 export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=...
 tofu init && tofu apply
@@ -206,7 +206,7 @@ Tudo que é específico da sua organização ou secreto fica **fora do git**: `.
 Para não perder esses arquivos ao trocar de máquina ou clonar de novo, o repositório traz um `.dotswap.json` para o [dotswap](https://www.npmjs.com/package/dotswap), que guarda cópias deles fora do repositório e as restaura sob demanda:
 
 ```bash
-cd infra
+cd rbb-iac
 dotswap new magalu && dotswap switch magalu   # primeira vez: cria o ambiente local
 # ... preencha .env e os terraform.tfvars a partir dos exemplos ...
 dotswap save                                  # guarda em ~/.dotswap/rbb-infra/magalu/
@@ -232,7 +232,7 @@ O uso do dotswap é opcional; qualquer gerenciador de segredos serve, desde que 
 ## Estrutura
 
 ```
-infra/
+rbb-iac/
 ├── Makefile, scripts/            # sync com participantes, link de nós, info/publicação no nodes.json, ssh
 └── tofu/
     ├── modules/

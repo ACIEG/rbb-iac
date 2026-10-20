@@ -15,5 +15,5 @@ output "audit_bucket" {
 }
 
 output "next_step" {
-  value = "Endereço Ethereum: (cd infra/tools/kms-signer && npm ci && npm run address -- ${module.admin_key.alias})"
+  value = "Endereço Ethereum: (cd tools/kms-signer && npm ci && npm run address -- ${module.admin_key.alias})"
 }
