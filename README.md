@@ -1,6 +1,6 @@
 # Infraestrutura como código para nós da RBB (OpenTofu)
 
-Este diretório automatiza, com [OpenTofu](https://opentofu.org) (open source, compatível com Terraform), a criação da infraestrutura de uma organização partícipe da Rede Blockchain Brasil, seguindo o [roteiro de adição de nós](../roteiro_adicao_nos.md), o [padrão de nomes](../padrao_nomes_nos.md) e o [guia do rbb-cli](../guia_rbb-cli.md).
+Este repositório automatiza, com [OpenTofu](https://opentofu.org) (open source, compatível com Terraform), a criação da infraestrutura de uma organização partícipe da Rede Blockchain Brasil, seguindo o [roteiro de adição de nós](https://github.com/RBBNet/rbb/blob/master/roteiro_adicao_nos.md), o [padrão de nomes](https://github.com/RBBNet/rbb/blob/master/padrao_nomes_nos.md) e o [guia do rbb-cli](https://github.com/RBBNet/rbb/blob/master/guia_rbb-cli.md).
 
 O código é **genérico**: a parte que descreve um nó RBB (bootstrap, portas, firewall) não depende de provedor de nuvem. A implementação inicial usa a **Magalu Cloud** (provider `magalucloud/mgc`); outros provedores podem ser adicionados implementando um módulo com o mesmo contrato (ver [Portando para outro provedor](#portando-para-outro-provedor)).
 

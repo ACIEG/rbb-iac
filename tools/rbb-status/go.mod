@@ -1,4 +1,4 @@
-module github.com/RBBNet/rbb/infra/tools/rbb-status
+module github.com/RBBNet/rbb-iac/tools/rbb-status
 
 go 1.24
 
