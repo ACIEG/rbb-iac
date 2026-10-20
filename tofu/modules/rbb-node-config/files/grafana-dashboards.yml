@@ -1,0 +1,11 @@
+# Provisionamento do Grafana: painéis versionados neste repositório (pasta "RBB").
+apiVersion: 1
+providers:
+  - name: rbb
+    folder: RBB
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false

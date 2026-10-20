@@ -59,5 +59,30 @@ services:
         max-size: "10m"
         max-file: "5"
 
+  # Grafana: painéis sobre o Prometheus local, em https://<ip>/grafana/ (login próprio; senha inicial em
+  # .grafana-admin-initial). Fonte de dados e painéis provisionados a partir de ./grafana/provisioning.
+  grafana:
+    image: grafana/grafana-oss:11.4.0
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    env_file:
+      - ./grafana/grafana.env
+    environment:
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SECURITY_COOKIE_SECURE: "true"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
 volumes:
   prometheus-data:
+  grafana-data:

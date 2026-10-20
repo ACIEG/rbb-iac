@@ -24,6 +24,9 @@ for node in ${nodes[@]+"${nodes[@]}"}; do
     node_ssh "${env}" "${node}" 'cat > /tmp/pn && sudo install -m 0644 /tmp/pn /etc/rbb/prometheus/nginx.conf' < "${files}/prometheus-nginx.conf"
     node_ssh "${env}" "${node}" 'cat > /tmp/pr && sudo install -m 0644 /tmp/pr /etc/rbb/prometheus/rules.yml' < "${files}/prometheus-rules.yml"
     node_ssh "${env}" "${node}" 'cat > /tmp/pb && sudo install -m 0644 /tmp/pb /etc/rbb/prometheus/blackbox.yml' < "${files}/prometheus-blackbox.yml"
+    for g in grafana-datasources.yml grafana-dashboards.yml grafana-dashboard-nos.json; do
+      node_ssh "${env}" "${node}" "cat > /tmp/g && sudo install -m 0644 /tmp/g /etc/rbb/prometheus/${g}" < "${files}/${g}"
+    done
     # prometheus.yml: o modelo não usa variáveis (templatefile com mapa vazio), então o arquivo é o próprio
     node_ssh "${env}" "${node}" 'cat > /tmp/py && sudo install -m 0644 /tmp/py /etc/rbb/prometheus/prometheus.yml' < "${INFRA_DIR}/tofu/modules/rbb-node-config/templates/prometheus.yml.tftpl"
   fi

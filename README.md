@@ -141,6 +141,10 @@ Do lado local, `scripts/rbb-ssh-keys.sh <env> show|set|add|remove` gerencia as c
 
 O layout na VM é o mesmo do roteiro: `/srv/rbb/start-network/` (rbb-cli, `infra.json`, `.env.configs/`, `volumes/<nó>/`), então qualquer comando dos roteiros oficiais pode ser executado ali.
 
+## Grafana
+
+O nó prometheus traz um Grafana em `https://<ip-do-prometheus>/grafana/` (mesmo certificado do NGINX; login próprio, usuário `admin`, senha inicial em `/srv/rbb/prometheus/.grafana-admin-initial`, legível só por root). A fonte de dados e os painéis são provisionados a partir deste repositório (`files/grafana-*`): o painel **RBB - nós e federação** mostra distância da ponta, peers, reinícios, altura e memória dos nossos nós, o estado da federação por organização (porta e certificado) e os alertas ativos. Painéis criados pela interface não são versionados; para mudar o padrão, edite o JSON e reenvie com `rbb-update-tools.sh`.
+
 ## Armazenamento do Besu: Bonsai ou Forest
 
 O roteiro da RBB não fixa formato; o `docker-compose.yml.hbs` não define `data-storage-format`, então vale o padrão do Besu 25.5.0, que é **Bonsai**: menor uso de disco e memória, adequado a boot, validator, writer e observer-boot, que só precisam do estado atual. **Forest** com `sync-mode FULL` guarda o estado histórico completo (archive) e só é indicado para um nó de leitura que alimente explorador de blocos, auditoria ou indicadores, como o observer archive do explorador do TCU. Não use Forest nos nós núcleo nem no observer-boot público: é mais pesado, e o RPC de um archive não deve ser exposto.

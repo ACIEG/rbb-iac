@@ -222,5 +222,8 @@ locals {
     prometheus_setup              = base64gzip(file("${path.module}/files/prometheus-setup.sh"))
     prometheus_docker             = base64gzip(file("${path.module}/files/prometheus-compose.yml"))
     prometheus_blackbox           = base64gzip(file("${path.module}/files/prometheus-blackbox.yml"))
+    grafana_datasources           = base64gzip(file("${path.module}/files/grafana-datasources.yml"))
+    grafana_dashboards            = base64gzip(file("${path.module}/files/grafana-dashboards.yml"))
+    grafana_dashboard_nos         = base64gzip(file("${path.module}/files/grafana-dashboard-nos.json"))
   })
 }

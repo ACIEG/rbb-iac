@@ -38,9 +38,24 @@ if [[ ! -f "${PROM_HOME}/.htpasswd" ]]; then
   (umask 077; printf 'admin:%s\n' "${PW}" > "${PROM_HOME}/.htpasswd-initial")
 fi
 
+# Grafana: provisionamento (fonte de dados + painéis versionados) e senha inicial do admin
+# (gravada em ${PROM_HOME}/.grafana-admin-initial, legível só por root). URL: https://<ip>/grafana/
+mkdir -p "${PROM_HOME}/grafana/provisioning/datasources" "${PROM_HOME}/grafana/provisioning/dashboards"
+cp -f /etc/rbb/prometheus/grafana-datasources.yml "${PROM_HOME}/grafana/provisioning/datasources/prometheus.yml"
+cp -f /etc/rbb/prometheus/grafana-dashboards.yml "${PROM_HOME}/grafana/provisioning/dashboards/rbb.yml"
+cp -f /etc/rbb/prometheus/grafana-dashboard-nos.json "${PROM_HOME}/grafana/provisioning/dashboards/rbb-nos.json"
+if [[ ! -f "${PROM_HOME}/grafana/grafana.env" ]]; then
+  GPW="$(openssl rand -base64 18)"
+  printf 'GF_SECURITY_ADMIN_PASSWORD=%s\nGF_SERVER_ROOT_URL=https://%s/grafana/\n' "${GPW}" "${PUBLIC_IP:-${PRIVATE_IP}}" > "${PROM_HOME}/grafana/grafana.env"
+  (umask 077; printf 'admin:%s\n' "${GPW}" > "${PROM_HOME}/.grafana-admin-initial")
+fi
+chmod 600 "${PROM_HOME}/grafana/grafana.env"
+
 chown -R rbb:rbb "${PROM_HOME}"
-chown root:root "${PROM_HOME}/.htpasswd-initial" 2>/dev/null || true
+chown root:root "${PROM_HOME}/.htpasswd-initial" "${PROM_HOME}/.grafana-admin-initial" 2>/dev/null || true
 
 cd "${PROM_HOME}"
 sudo -u rbb -H docker compose up -d
-echo "[rbb] Prometheus + NGINX iniciados em ${PROM_HOME}"
+# nginx.conf é bind mount: recarrega para aplicar mudanças sem recriar o contêiner
+sudo -u rbb -H docker compose exec -T nginx nginx -s reload >/dev/null 2>&1 || true
+echo "[rbb] Prometheus + NGINX + Grafana iniciados em ${PROM_HOME}"

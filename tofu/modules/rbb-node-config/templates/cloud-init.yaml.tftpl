@@ -65,6 +65,18 @@ write_files:
     permissions: "0644"
     encoding: gz+b64
     content: ${prometheus_blackbox}
+  - path: /etc/rbb/prometheus/grafana-datasources.yml
+    permissions: "0644"
+    encoding: gz+b64
+    content: ${grafana_datasources}
+  - path: /etc/rbb/prometheus/grafana-dashboards.yml
+    permissions: "0644"
+    encoding: gz+b64
+    content: ${grafana_dashboards}
+  - path: /etc/rbb/prometheus/grafana-dashboard-nos.json
+    permissions: "0644"
+    encoding: gz+b64
+    content: ${grafana_dashboard_nos}
   - path: /etc/rbb/prometheus/nginx.conf
     permissions: "0644"
     encoding: gz+b64
