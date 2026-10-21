@@ -26,9 +26,10 @@ groups:
 - name: node health
   rules:
   - record: rbb:validators_connected
-    expr: count by (node) (rbb_peer_connected{peer_type="validator", own="false"}) or (max by (node) (rbb_node_info{role="validator"}) * 0)
+    expr: count by (node) (rbb_peer_connected{peer_type="validator", own="false", in_consensus="true"}) or (max by (node) (rbb_node_info{role="validator"}) * 0)
+  # Só os validators que estão no consenso QBFT agora (um validator permissionado mas fora do consenso não conta)
   - record: rbb:validators_expected
-    expr: count by (node) (rbb_peer_expected{peer_type="validator", own="false"})
+    expr: count by (node) (rbb_peer_expected{peer_type="validator", own="false", in_consensus="true"})
   - record: rbb:own_peers_connected
     expr: count by (node) (rbb_peer_connected{own="true"}) or (max by (node) (rbb_node_info) * 0)
   - record: rbb:partner_boots_connected

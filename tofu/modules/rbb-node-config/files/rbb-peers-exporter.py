@@ -4,9 +4,10 @@ peers esperados, disco e memória real do contêiner do Besu. Só biblioteca pad
 (lê o cgroup do contêiner via docker inspect).
 
 Métricas:
-  rbb_peer_connected{organization,peer,peer_type,direction,own}  1 por sessão P2P ativa
-  rbb_peer_expected{organization,peer,peer_type,own}             1 por peer em static-nodes / bootnodes
-  rbb_peer_port_open{organization,peer,peer_type,own}            1 se a porta P2P do peer esperado aceita TCP
+  rbb_peer_connected{organization,peer,peer_type,direction,own,in_consensus}  1 por sessão P2P ativa
+  rbb_peer_expected{organization,peer,peer_type,own,in_consensus}             1 por peer em static-nodes / bootnodes
+  rbb_peer_port_open{organization,peer,peer_type,own,in_consensus}            1 se a porta P2P do peer esperado aceita TCP
+  rbb_consensus_validators                                                    validators no consenso QBFT agora
   rbb_disk_bytes{mount,kind="total|used"}                        disco raiz e volume de dados
   rbb_besu_memory_anon_bytes / rbb_besu_memory_limit_bytes       memória real (anon) e limite do contêiner
   rbb_node_info{role}                                            papel do nó (boot, validator, writer, observer-boot, observer)
@@ -69,15 +70,22 @@ def port_open(host, port, timeout=3):
     except Exception:
         return 0
 
-def label(m, ip, port=None, fallback_type=""):
+def entry(m, ip, port=None):
     cands = m.get(ip) or []
     e = None
     if port is not None:
         e = next((c for c in cands if int(c.get("port") or 0) == int(port)), None)
     if e is None and cands:
         e = next((c for c in cands if c.get("type") == PREFER.get(NTYPE)), cands[0])
-    if e: return e.get("organization", "?"), e.get("node", ip), e.get("type", fallback_type), "true" if e.get("own") else "false"
-    return "desconhecida", ip, fallback_type, "false"
+    return e
+
+def labels_for(m, ip, port, cons, fallback_type=""):
+    e = entry(m, ip, port)
+    if not e:
+        return {"organization": "desconhecida", "peer": ip, "peer_type": fallback_type, "own": "false", "in_consensus": "false"}
+    vid = (e.get("id") or "").lower().replace("0x", "")
+    return {"organization": e.get("organization", "?"), "peer": e.get("node", ip), "peer_type": e.get("type", fallback_type),
+            "own": "true" if e.get("own") else "false", "in_consensus": "true" if (vid and vid in cons) else "false"}
 
 def esc(s): return str(s).replace("\\", "\\\\").replace('"', '\\"')
 def fmt(name, labels, value):
@@ -101,16 +109,25 @@ def cgroup_mem():
     except Exception:
         return None, None
 
+def consensus_set():
+    """Endereços (sem 0x, minúsculos) dos validators no consenso QBFT agora."""
+    try:
+        return {a.lower().replace("0x", "") for a in (rpc("qbft_getValidatorsByBlockNumber", ["latest"]) or [])}
+    except Exception:
+        return set()
+
 def collect():
     t0 = time.time(); lines = [fmt("rbb_node_info", {"role": NTYPE}, 1)]
-    m = load_map()
+    m = load_map(); cons = consensus_set()
+    lines.append(f"rbb_consensus_validators {len(cons)}")
     # sessões ativas
     try:
         for p in rpc("admin_peers") or []:
             addr = re.sub(r"^[^/]*/", "", p["network"]["remoteAddress"]); ip, rport = addr.rsplit(":", 1)
             inbound = bool(p["network"].get("inbound"))
-            org, name, typ, own = label(m, ip, None if inbound else int(rport))
-            lines.append(fmt("rbb_peer_connected", {"organization": org, "peer": name, "peer_type": typ, "direction": "inbound" if p["network"].get("inbound") else "outbound", "own": own}, 1))
+            lab = labels_for(m, ip, None if inbound else int(rport), cons)
+            lab["direction"] = "inbound" if inbound else "outbound"
+            lines.append(fmt("rbb_peer_connected", lab, 1))
     except Exception as ex:
         lines.append(f"# admin_peers falhou: {esc(ex)}")
     # esperados + porta
@@ -121,8 +138,7 @@ def collect():
         except Exception: pass
         if (ip, port) in seen: continue
         seen.add((ip, port))
-        org, name, typ, own = label(m, ip, port)
-        lab = {"organization": org, "peer": name, "peer_type": typ, "own": own}
+        lab = labels_for(m, ip, port, cons)
         lines.append(fmt("rbb_peer_expected", lab, 1))
         lines.append(fmt("rbb_peer_port_open", lab, port_open(ip, port)))
     # disco
