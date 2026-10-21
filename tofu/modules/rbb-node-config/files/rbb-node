@@ -174,7 +174,7 @@ cmd_jfr_clean() {
 # com admin_removePeer + admin_addPeer; registra no syslog. Não mexe em quem já está conectado.
 watchdog_reconnect() {
   local sn="$(peers_file)" connected enode host n=0
-  [[ -s "${sn}" ]] || return 0
+  [[ -s "${sn}" || "${NODE_TYPE}" == "boot" ]] || return 0
   connected="$(curl -s -m 10 -X POST -H 'Content-Type: application/json' \
     --data '{"jsonrpc":"2.0","method":"admin_peers","params":[],"id":1}' "http://127.0.0.1:${RPC_PORT}" \
     | jq -r '.result[].network.remoteAddress' 2>/dev/null | sed -E 's#^[^/]*/##; s#:[0-9]+$##')"
@@ -187,8 +187,8 @@ watchdog_reconnect() {
         --data "{\"jsonrpc\":\"2.0\",\"method\":\"${m}\",\"params\":[\"${enode}\"],\"id\":1}" "http://127.0.0.1:${RPC_PORT}" >/dev/null 2>&1
     done
     n=$(( n + 1 ))
-  done < <(jq -r '.[]' "${sn}" 2>/dev/null)
-  [[ ${n} -eq 0 ]] || logger -t rbb-watchdog "${NODE_NAME}: ${n} peer(s) estático(s) ausente(s); nova tentativa de conexão enviada"
+  done < <({ jq -r '.[]' "${sn}" 2>/dev/null; [[ "${NODE_TYPE}" == "boot" ]] && jq -r '.config.discovery.bootnodes[]? // empty' "${GENESIS}" 2>/dev/null; } | sort -u)
+  [[ ${n} -eq 0 ]] || logger -t rbb-watchdog "${NODE_NAME}: ${n} peer(s) esperado(s) ausente(s); nova tentativa de conexão enviada"
 }
 
 # Memória: o Besu 25.5 cresce fora do heap de forma contínua (boot sincronizado: ~0,4 GB/dia) até o

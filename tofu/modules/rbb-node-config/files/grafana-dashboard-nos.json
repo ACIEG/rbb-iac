@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 9,
+ "version": 10,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -778,7 +778,7 @@
    "id": 15,
    "type": "stat",
    "title": "Sessões P2P",
-   "description": "Sessão P2P ativa entre o nosso nó e o nó deles que está na nossa lista de peers.",
+   "description": "Sessão P2P ativa entre o nosso nó e o nó deles. Validator ↔ validator precisa existir (vermelho se não). Boot ↔ boot é opcional: boots se descobrem e alternam sessões ao longo do tempo (laranja se não).",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -851,7 +851,50 @@
       }
      ]
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/^boot/"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "0": {
+            "text": "sem sessão (boots alternam)",
+            "color": "orange"
+           },
+           "1": {
+            "text": "conectado",
+            "color": "green"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "orange",
+           "value": null
+          },
+          {
+           "color": "green",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
    }
   },
   {
