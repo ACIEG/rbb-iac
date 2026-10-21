@@ -74,11 +74,14 @@ nodes_of_type() { nodes_json "$1" | jq -r --arg t "$2" 'to_entries[] | select(.v
 
 # Mapa IP -> organização/nó/tipo para o exportador rbb-peers (/etc/rbb/peers-map.json):
 # nós das outras organizações (network/nodes.json, IPs públicos) + os nossos (IPs privado e público, own=true).
+_PEERS_MAP_CACHE=""
 peers_map_json() {
   local env="$1" netdir; netdir="$(env_dir "${env}")/network"
-  local org; org="$(cd "$(env_dir "${env}")" && tofu output -raw organization_name 2>/dev/null || echo "ACIEG")"
-  {
+  if [[ -n "${_PEERS_MAP_CACHE}" ]]; then printf '%s' "${_PEERS_MAP_CACHE}"; return; fi
+  local org; org="$(cd "$(env_dir "${env}")" && tofu output -raw organization_name 2>/dev/null || echo "ORG")"
+  _PEERS_MAP_CACHE="$({
     [[ -f "${netdir}/nodes.json" ]] && jq -c --arg o "${org}" '[.[] | select(.organization != $o) | .organization as $org | .nodes[] | select(.ipAddresses != null) | .ipAddresses[] as $ip | {ip: $ip, organization: $org, node: .name, type: .nodeType, port: .port, own: false}]' "${netdir}/nodes.json"
     nodes_json "${env}" | jq -c --arg o "${org}" '[to_entries[] | .key as $n | .value as $v | ([$v.private_ip, $v.public_ip] | map(select(. != null and . != ""))[]) as $ip | {ip: $ip, organization: $o, node: $n, type: $v.type, port: (($v.p2p_address // "") | split(":") | .[1] // "30303" | tonumber), own: true}]'
-  } | jq -s 'add | unique_by([.ip, .port])'
+  } | jq -s 'add | unique_by([.ip, .port])')"
+  printf '%s' "${_PEERS_MAP_CACHE}"
 }

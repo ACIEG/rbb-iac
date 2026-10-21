@@ -16,9 +16,9 @@ for node in ${nodes[@]+"${nodes[@]}"}; do
   node_ssh "${env}" "${node}" 'cat > /tmp/rbb-node-setup && sudo install -m 0755 /tmp/rbb-node-setup /usr/local/sbin/rbb-node-setup' < "${files}/rbb-node-setup.sh"
   node_ssh "${env}" "${node}" 'cat > /tmp/rbb-node && sudo install -m 0755 /tmp/rbb-node /usr/local/bin/rbb-node' < "${files}/rbb-node"
   if [[ "$(nodes_json "${env}" | jq -r --arg n "${node}" '.[$n].type')" != "prometheus" ]]; then
-    node_ssh "${env}" "${node}" 'cat > /tmp/rbb-peers-exporter && sudo install -m 0755 /tmp/rbb-peers-exporter /usr/local/bin/rbb-peers-exporter' < "${files}/rbb-peers-exporter.py"
-    peers_map_json "${env}" | node_ssh "${env}" "${node}" 'cat > /tmp/peers-map.json && sudo install -m 0644 /tmp/peers-map.json /etc/rbb/peers-map.json'
-    node_ssh "${env}" "${node}" 'sudo systemctl restart rbb-peers-exporter 2>/dev/null || true'
+    # exporter + mapa + reinício do serviço numa única sessão SSH
+    { printf 'EXPORTER_B64=%s\nMAP_B64=%s\n' "$(base64 < "${files}/rbb-peers-exporter.py" | tr -d '\n')" "$(peers_map_json "${env}" | base64 | tr -d '\n')"; } \
+      | node_ssh "${env}" "${node}" 'set -e; . /dev/stdin; printf "%s" "$EXPORTER_B64" | base64 -d > /tmp/rbb-peers-exporter; printf "%s" "$MAP_B64" | base64 -d > /tmp/peers-map.json; sudo install -m 0755 /tmp/rbb-peers-exporter /usr/local/bin/rbb-peers-exporter; sudo install -m 0644 /tmp/peers-map.json /etc/rbb/peers-map.json; sudo systemctl restart rbb-peers-exporter 2>/dev/null || true'
   fi
   if [[ -f "${files}/prometheus-setup.sh" ]]; then
     node_ssh "${env}" "${node}" 'cat > /tmp/rbb-prometheus-setup && sudo install -m 0755 /tmp/rbb-prometheus-setup /usr/local/sbin/rbb-prometheus-setup' < "${files}/prometheus-setup.sh"
