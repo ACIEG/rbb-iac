@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 5,
+ "version": 6,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -48,7 +48,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(rbb:node_health, \"node\", \"obs-$1\", \"node\", \"observer-(boot[0-9]+)\")",
+     "expr": "label_replace(rbb:node_health, \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
      "legendFormat": "{{node}}",
      "instant": true,
@@ -136,7 +136,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(node_block_height_distance_from_tip{job=\"rbb\"}, \"node\", \"obs-$1\", \"node\", \"observer-(boot[0-9]+)\")",
+     "expr": "label_replace(node_block_height_distance_from_tip{job=\"rbb\"}, \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
      "legendFormat": "{{node}}",
      "instant": true,
@@ -207,7 +207,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(changes(process_start_time_seconds{job=\"rbb\"}[24h]), \"node\", \"obs-$1\", \"node\", \"observer-(boot[0-9]+)\")",
+     "expr": "label_replace(changes(process_start_time_seconds{job=\"rbb\"}[24h]), \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
      "legendFormat": "{{node}}",
      "instant": true,
@@ -277,7 +277,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(rbb:validators_connected, \"node\", \"obs-$1\", \"node\", \"observer-(boot[0-9]+)\")",
+     "expr": "label_replace(rbb:validators_connected, \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
      "legendFormat": "{{node}}",
      "instant": true,
@@ -350,7 +350,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(clamp_max(rbb:own_peers_connected, 1), \"node\", \"obs-$1\", \"node\", \"observer-(boot[0-9]+)\")",
+     "expr": "label_replace(clamp_max(rbb:own_peers_connected, 1), \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
      "legendFormat": "{{node}}",
      "instant": true,
@@ -430,7 +430,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(rbb:partner_boots_connected, \"node\", \"obs-$1\", \"node\", \"observer-(boot[0-9]+)\")",
+     "expr": "label_replace(rbb:partner_boots_connected, \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
      "legendFormat": "{{node}}",
      "instant": true,
@@ -500,7 +500,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(rbb_besu_memory_anon_bytes, \"node\", \"obs-$1\", \"node\", \"observer-(boot[0-9]+)\")",
+     "expr": "label_replace(rbb_besu_memory_anon_bytes, \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
      "legendFormat": "{{node}}"
     },
@@ -562,7 +562,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(rate(process_cpu_seconds_total{job=\"rbb\"}[5m]) * 100, \"node\", \"obs-$1\", \"node\", \"observer-(boot[0-9]+)\")",
+     "expr": "label_replace(rate(process_cpu_seconds_total{job=\"rbb\"}[5m]) * 100, \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
      "legendFormat": "{{node}}"
     }
@@ -615,7 +615,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(rbb_disk_bytes{kind=\"used\", mount!=\"/\"} / on(node, mount) rbb_disk_bytes{kind=\"total\", mount!=\"/\"}, \"node\", \"obs-$1\", \"node\", \"observer-(boot[0-9]+)\")",
+     "expr": "label_replace(rbb_disk_bytes{kind=\"used\", mount!=\"/\"} / on(node, mount) rbb_disk_bytes{kind=\"total\", mount!=\"/\"}, \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
      "legendFormat": "{{node}}",
      "instant": true,
@@ -777,7 +777,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(rbb_peer_port_open{organization=\"$organization\", own=\"false\"}, \"node\", \"obs-$1\", \"node\", \"observer-(boot[0-9]+)\")",
+     "expr": "label_replace(rbb_peer_port_open{organization=\"$organization\", own=\"false\"}, \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
      "legendFormat": "{{node}} → {{peer}}",
      "instant": true,
@@ -857,7 +857,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace((rbb_peer_expected{organization=\"$organization\", own=\"false\"} and on(node, peer) rbb_peer_connected) or (rbb_peer_expected{organization=\"$organization\", own=\"false\"} * 0), \"node\", \"obs-$1\", \"node\", \"observer-(boot[0-9]+)\")",
+     "expr": "label_replace((rbb_peer_expected{organization=\"$organization\", own=\"false\"} and on(node, organization, peer) rbb_peer_connected) or (rbb_peer_expected{organization=\"$organization\", own=\"false\"} * 0), \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
      "legendFormat": "{{node}} ↔ {{peer}}",
      "instant": true,
