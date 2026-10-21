@@ -72,16 +72,23 @@ node_ssh() {
 
 nodes_of_type() { nodes_json "$1" | jq -r --arg t "$2" 'to_entries[] | select(.value.type == $t) | .key'; }
 
-# Mapa IP -> organização/nó/tipo para o exportador rbb-peers (/etc/rbb/peers-map.json):
-# nós das outras organizações (network/nodes.json, IPs públicos) + os nossos (IPs privado e público, own=true).
 _PEERS_MAP_CACHE=""
 peers_map_json() {
-  local env="$1" netdir; netdir="$(env_dir "${env}")/network"
-  if [[ -n "${_PEERS_MAP_CACHE}" ]]; then printf '%s' "${_PEERS_MAP_CACHE}"; return; fi
-  local org; org="$(cd "$(env_dir "${env}")" && tofu output -raw organization_name 2>/dev/null || echo "ORG")"
-  _PEERS_MAP_CACHE="$({
-    [[ -f "${netdir}/nodes.json" ]] && jq -c --arg o "${org}" '[.[] | select(.organization != $o) | .organization as $org | .nodes[] | select(.ipAddresses != null) | .ipAddresses[] as $ip | {ip: $ip, organization: $org, node: .name, type: .nodeType, port: .port, id: (.id // null), own: false}]' "${netdir}/nodes.json"
-    nodes_json "${env}" | jq -c --arg o "${org}" '[to_entries[] | .key as $n | .value as $v | ([$v.private_ip, $v.public_ip] | map(select(. != null and . != ""))[]) as $ip | {ip: $ip, organization: $o, node: $n, type: $v.type, port: (($v.p2p_address // "") | split(":") | .[1] // "30303" | tonumber), own: true}]'
-  } | jq -s 'add | unique_by([.ip, .port])')"
+  # Mapa IP -> organização/nó/tipo para o exportador rbb-peers (/etc/rbb/peers-map.json):
+  # nós das outras organizações (network/nodes.json, IPs públicos) + os nossos (IPs privado e público, own=true).
+  # Atenção ao bash 3.2 do macOS: não envolver o jq em "$(...)" com aspas duplas (expande $vars do programa jq).
+  local env="$1" netdir orgname
+  netdir="$(env_dir "${env}")/network"
+  orgname=$(cd "$(env_dir "${env}")" && tofu output -raw organization_name 2>/dev/null || echo "ORG")
+  if [[ -z "${_PEERS_MAP_CACHE}" ]]; then
+    _PEERS_MAP_CACHE=$(
+      {
+        if [[ -f "${netdir}/nodes.json" ]]; then
+          jq -c --arg own_org "${orgname}" '[.[] | select(.organization != $own_org) | .organization as $theirs | .nodes[] | select(.ipAddresses != null) | .ipAddresses[] as $addr | {ip: $addr, organization: $theirs, node: .name, type: .nodeType, port: .port, id: (.id // null), own: false}]' "${netdir}/nodes.json"
+        fi
+        nodes_json "${env}" | jq -c --arg own_org "${orgname}" '[to_entries[] | .key as $name | .value as $val | ([$val.private_ip, $val.public_ip] | map(select(. != null and . != ""))[]) as $addr | {ip: $addr, organization: $own_org, node: $name, type: $val.type, port: (($val.p2p_address // "") | split(":") | .[1] // "30303" | tonumber), own: true}]'
+      } | jq -s 'add | unique_by([.ip, .port])'
+    )
+  fi
   printf '%s' "${_PEERS_MAP_CACHE}"
 }
