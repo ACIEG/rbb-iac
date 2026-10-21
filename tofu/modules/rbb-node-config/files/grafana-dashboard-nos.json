@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 8,
+ "version": 9,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -259,8 +259,8 @@
   {
    "id": 5,
    "type": "stat",
-   "title": "Validators vistos pelo nosso validator (vistos / no consenso)",
-   "description": "Sessões P2P do nosso validator com validators de outras organizações que estão no consenso QBFT agora, e quantos são. Precisa ver pelo menos 2/3 para participar bem.",
+   "title": "Validators vistos pelo nosso validator",
+   "description": "Validators de outras organizações, no consenso QBFT agora, com sessão P2P ativa no nosso validator, e quantos são ao todo. Precisa ver pelo menos 2/3 para participar bem.",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -268,7 +268,7 @@
    "gridPos": {
     "x": 0,
     "y": 6,
-    "w": 6,
+    "w": 8,
     "h": 4
    },
    "targets": [
@@ -277,9 +277,20 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(rbb:validators_connected, \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
+     "expr": "rbb:validators_connected",
      "refId": "A",
-     "legendFormat": "{{node}}: vistos / $consensus no consenso",
+     "legendFormat": "vistos",
+     "instant": true,
+     "range": false
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "rbb:validators_expected",
+     "refId": "B",
+     "legendFormat": "no consenso",
      "instant": true,
      "range": false
     }
@@ -336,9 +347,9 @@
     "uid": "prometheus"
    },
    "gridPos": {
-    "x": 6,
+    "x": 8,
     "y": 6,
-    "w": 9,
+    "w": 16,
     "h": 4
    },
    "targets": [
@@ -402,76 +413,6 @@
        }
       }
      ]
-    },
-    "overrides": []
-   }
-  },
-  {
-   "id": 7,
-   "type": "stat",
-   "title": "Boots de parceiros no nosso boot",
-   "description": "Sessões do(s) nosso(s) boot(s) com boots e writers de parceiros de outras organizações. É por aqui que a descoberta de peers da rede chega até nós.",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "prometheus"
-   },
-   "gridPos": {
-    "x": 15,
-    "y": 6,
-    "w": 9,
-    "h": 4
-   },
-   "targets": [
-    {
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prometheus"
-     },
-     "expr": "label_replace(rbb:partner_boots_connected and on(node) max by (node) (rbb_node_info{role=\"boot\"}), \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
-     "refId": "A",
-     "legendFormat": "{{node}}",
-     "instant": true,
-     "range": false
-    }
-   ],
-   "options": {
-    "reduceOptions": {
-     "calcs": [
-      "lastNotNull"
-     ],
-     "fields": "",
-     "values": false
-    },
-    "orientation": "auto",
-    "textMode": "value_and_name",
-    "colorMode": "background",
-    "graphMode": "none",
-    "justifyMode": "center",
-    "wideLayout": true
-   },
-   "fieldConfig": {
-    "defaults": {
-     "color": {
-      "mode": "thresholds"
-     },
-     "thresholds": {
-      "mode": "absolute",
-      "steps": [
-       {
-        "color": "red",
-        "value": null
-       },
-       {
-        "color": "orange",
-        "value": 1
-       },
-       {
-        "color": "green",
-        "value": 3
-       }
-      ]
-     },
-     "mappings": []
     },
     "overrides": []
    }
@@ -1032,28 +973,6 @@
     },
     "hide": 2,
     "regex": "/organization=\"([^\"]+)\"/"
-   },
-   {
-    "name": "consensus",
-    "label": "Validators no consenso",
-    "type": "query",
-    "datasource": {
-     "type": "prometheus",
-     "uid": "prometheus"
-    },
-    "query": {
-     "query": "query_result(max(rbb:validators_expected))",
-     "refId": "var"
-    },
-    "definition": "query_result(max(rbb:validators_expected))",
-    "regex": "/\\s(\\d+)\\s/",
-    "refresh": 2,
-    "sort": 0,
-    "hide": 2,
-    "current": {
-     "text": "?",
-     "value": "?"
-    }
    }
   ]
  },
