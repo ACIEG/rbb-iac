@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 7,
+ "version": 8,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -330,7 +330,7 @@
    "id": 6,
    "type": "stat",
    "title": "Ligação com o boot próprio",
-   "description": "writer, observer-boot e observer só falam com os nós próprios pela VPC; sem essa ligação, não recebem blocos.",
+   "description": "Só os nós que dependem do boot próprio (writer, observer-boot e observer): sem essa ligação pela VPC não recebem blocos. Boot e validator não entram aqui.",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -347,7 +347,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(clamp_max(rbb:own_peers_connected, 1), \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
+     "expr": "label_replace(clamp_max(rbb:own_peers_connected, 1) and on(node) max by (node) (rbb_node_info{role=~\"writer|observer-boot|observer\"}), \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
      "legendFormat": "{{node}}",
      "instant": true,
@@ -410,7 +410,7 @@
    "id": 7,
    "type": "stat",
    "title": "Boots de parceiros no nosso boot",
-   "description": "Sessões do boot01 com boots/writers de outras organizações.",
+   "description": "Sessões do(s) nosso(s) boot(s) com boots e writers de parceiros de outras organizações. É por aqui que a descoberta de peers da rede chega até nós.",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -427,7 +427,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(rbb:partner_boots_connected, \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
+     "expr": "label_replace(rbb:partner_boots_connected and on(node) max by (node) (rbb_node_info{role=\"boot\"}), \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
      "legendFormat": "{{node}}",
      "instant": true,
