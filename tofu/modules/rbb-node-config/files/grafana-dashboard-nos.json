@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 2,
+ "version": 3,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -1137,10 +1137,10 @@
      "uid": "prometheus"
     },
     "query": {
-     "query": "label_values(rbb_peer_expected{own=\"false\"}, organization)",
+     "query": "query_result(count by (organization) (rbb_peer_expected{own=\"false\"} or probe_success{job=\"federation-port\"}))",
      "refId": "var"
     },
-    "definition": "label_values(rbb_peer_expected{own=\"false\"}, organization)",
+    "definition": "query_result(count by (organization) (rbb_peer_expected{own=\"false\"} or probe_success{job=\"federation-port\"}))",
     "refresh": 2,
     "sort": 1,
     "multi": true,
@@ -1150,7 +1150,8 @@
      "text": "All",
      "value": "$__all"
     },
-    "hide": 2
+    "hide": 2,
+    "regex": "/organization=\"([^\"]+)\"/"
    }
   ]
  },
