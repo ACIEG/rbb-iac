@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 6,
+ "version": 7,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -259,8 +259,8 @@
   {
    "id": 5,
    "type": "stat",
-   "title": "Validators vistos pelo nosso validator",
-   "description": "Sessões P2P com validators de outras organizações, e quantos estão na lista. Precisa de pelo menos 2/3 para participar bem do consenso.",
+   "title": "Validators vistos pelo nosso validator (vistos / no consenso)",
+   "description": "Sessões P2P do nosso validator com validators de outras organizações que estão no consenso QBFT agora, e quantos são. Precisa ver pelo menos 2/3 para participar bem.",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -279,18 +279,7 @@
      },
      "expr": "label_replace(rbb:validators_connected, \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
      "refId": "A",
-     "legendFormat": "{{node}}",
-     "instant": true,
-     "range": false
-    },
-    {
-     "datasource": {
-      "type": "prometheus",
-      "uid": "prometheus"
-     },
-     "expr": "rbb:validators_expected",
-     "refId": "B",
-     "legendFormat": "esperados",
+     "legendFormat": "{{node}}: vistos / $consensus no consenso",
      "instant": true,
      "range": false
     }
@@ -319,8 +308,16 @@
       "mode": "absolute",
       "steps": [
        {
-        "color": "green",
+        "color": "red",
         "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       },
+       {
+        "color": "green",
+        "value": 1000
        }
       ]
      },
@@ -1035,6 +1032,28 @@
     },
     "hide": 2,
     "regex": "/organization=\"([^\"]+)\"/"
+   },
+   {
+    "name": "consensus",
+    "label": "Validators no consenso",
+    "type": "query",
+    "datasource": {
+     "type": "prometheus",
+     "uid": "prometheus"
+    },
+    "query": {
+     "query": "query_result(max(rbb:validators_expected))",
+     "refId": "var"
+    },
+    "definition": "query_result(max(rbb:validators_expected))",
+    "regex": "/\\s(\\d+)\\s/",
+    "refresh": 2,
+    "sort": 0,
+    "hide": 2,
+    "current": {
+     "text": "?",
+     "value": "?"
+    }
    }
   ]
  },
