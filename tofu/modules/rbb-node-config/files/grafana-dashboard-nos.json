@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 10,
+ "version": 11,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -697,8 +697,8 @@
   {
    "id": 14,
    "type": "stat",
-   "title": "Portas P2P abertas para nós",
-   "description": "Teste TCP a partir do nosso nó até o nó deles (firewall do parceiro liberado para o nosso IP?).",
+   "title": "Firewall deles aberto para nós (portas P2P)",
+   "description": "Teste TCP do nosso nó até cada nó deles que está na nossa lista de peers (validators e boots). \"não se aplica\": organização sem validator/boot na nossa lista (ex.: parceiro só com writer e observer-boot, que se conectam a nós por iniciativa deles).",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -746,8 +746,12 @@
       "mode": "absolute",
       "steps": [
        {
-        "color": "red",
+        "color": "#6e6e6e",
         "value": null
+       },
+       {
+        "color": "red",
+        "value": 0
        },
        {
         "color": "green",
@@ -769,7 +773,8 @@
         }
        }
       }
-     ]
+     ],
+     "noValue": "não se aplica"
     },
     "overrides": []
    }
@@ -777,8 +782,8 @@
   {
    "id": 15,
    "type": "stat",
-   "title": "Sessões P2P",
-   "description": "Sessão P2P ativa entre o nosso nó e o nó deles. Validator ↔ validator precisa existir (vermelho se não). Boot ↔ boot é opcional: boots se descobrem e alternam sessões ao longo do tempo (laranja se não).",
+   "title": "Sessões P2P: validator = consenso, boot = rede",
+   "description": "Sessões P2P ativas entre nossos nós e os deles, incluindo as iniciadas por eles. validator ↔ validator é o que importa para o consenso (vermelho se faltar). boot ↔ boot é descoberta de peers e alterna com o tempo (laranja se faltar).",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -795,7 +800,7 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace((rbb_peer_expected{organization=\"$organization\", own=\"false\"} and on(node, organization, peer) rbb_peer_connected) or (rbb_peer_expected{organization=\"$organization\", own=\"false\"} * 0), \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
+     "expr": "max by (node, organization, peer) (rbb_peer_connected{organization=\"$organization\", own=\"false\"}) or (rbb_peer_expected{organization=\"$organization\", own=\"false\"} * 0)",
      "refId": "A",
      "legendFormat": "{{node}} ↔ {{peer}}",
      "instant": true,
@@ -826,8 +831,12 @@
       "mode": "absolute",
       "steps": [
        {
-        "color": "red",
+        "color": "#6e6e6e",
         "value": null
+       },
+       {
+        "color": "red",
+        "value": 0
        },
        {
         "color": "green",
@@ -849,7 +858,8 @@
         }
        }
       }
-     ]
+     ],
+     "noValue": "nenhuma"
     },
     "overrides": [
      {
@@ -900,7 +910,7 @@
   {
    "id": 16,
    "type": "stat",
-   "title": "Federação do Prometheus",
+   "title": "Federação do Prometheus (só monitoramento)",
    "description": "Porta 8443 aberta para o nosso Prometheus e NGINX aceitando o nosso certificado.",
    "datasource": {
     "type": "prometheus",
@@ -984,7 +994,8 @@
         }
        }
       }
-     ]
+     ],
+     "noValue": "sem alvo"
     },
     "overrides": []
    }
