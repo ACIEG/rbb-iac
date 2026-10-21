@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 12,
+ "version": 13,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -697,7 +697,7 @@
   {
    "id": 14,
    "type": "stat",
-   "title": "Firewall deles aberto para nós (portas P2P)",
+   "title": "Firewall deles aberto para nós",
    "description": "Teste TCP do nosso nó até cada nó deles que está na nossa lista de peers (validators e boots). \"não se aplica\": organização sem validator/boot na nossa lista (ex.: parceiro só com writer e observer-boot, que se conectam a nós por iniciativa deles).",
    "datasource": {
     "type": "prometheus",
@@ -715,9 +715,9 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "label_replace(rbb_peer_port_open{organization=\"$organization\", own=\"false\"}, \"node\", \"obsboot$1\", \"node\", \"observer-boot([0-9]+)\")",
+     "expr": "rbb_peer_port_open{organization=\"$organization\", own=\"false\", node=~\"boot.*|validator.*\"}",
      "refId": "A",
-     "legendFormat": "{{node}} → {{peer}}",
+     "legendFormat": "{{peer}}",
      "instant": true,
      "range": false
     }
@@ -735,7 +735,11 @@
     "colorMode": "background",
     "graphMode": "none",
     "justifyMode": "center",
-    "wideLayout": true
+    "wideLayout": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 22
+    }
    },
    "fieldConfig": {
     "defaults": {
@@ -782,8 +786,8 @@
   {
    "id": 15,
    "type": "stat",
-   "title": "Sessões P2P: validator = consenso, boot = rede",
-   "description": "Sessões P2P ativas entre nossos nós e os deles, incluindo as iniciadas por eles. validator ↔ validator é o que importa para o consenso (vermelho se faltar). boot ↔ boot é descoberta de peers e alterna com o tempo (laranja se faltar).",
+   "title": "Sessões P2P com nossos boot e validator",
+   "description": "Sessões P2P ativas do nosso boot e do nosso validator com os nós deles (nome do nó deles). validator = consenso (vermelho se faltar); boot/writer = rede, alterna com o tempo (laranja se faltar).",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
@@ -800,9 +804,9 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "max by (node, organization, peer) (rbb_peer_connected{organization=\"$organization\", own=\"false\"}) or (max by (node, organization, peer) (rbb_peer_expected{organization=\"$organization\", own=\"false\"}) * 0)",
+     "expr": "max by (organization, peer) (rbb_peer_connected{organization=\"$organization\", own=\"false\", node=~\"boot.*|validator.*\"}) or (max by (organization, peer) (rbb_peer_expected{organization=\"$organization\", own=\"false\", node=~\"boot.*|validator.*\"}) * 0)",
      "refId": "A",
-     "legendFormat": "{{node}} ↔ {{peer}}",
+     "legendFormat": "{{peer}}",
      "instant": true,
      "range": false
     }
@@ -820,7 +824,11 @@
     "colorMode": "background",
     "graphMode": "none",
     "justifyMode": "center",
-    "wideLayout": true
+    "wideLayout": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 22
+    }
    },
    "fieldConfig": {
     "defaults": {
@@ -865,7 +873,7 @@
      {
       "matcher": {
        "id": "byRegexp",
-       "options": "/^boot/"
+       "options": "/^(boot|writer|observer)/"
       },
       "properties": [
        {
@@ -875,7 +883,7 @@
           "type": "value",
           "options": {
            "0": {
-            "text": "sem sessão (boots alternam)",
+            "text": "sem sessão (alterna)",
             "color": "orange"
            },
            "1": {
@@ -892,8 +900,12 @@
          "mode": "absolute",
          "steps": [
           {
-           "color": "orange",
+           "color": "#6e6e6e",
            "value": null
+          },
+          {
+           "color": "orange",
+           "value": 0
           },
           {
            "color": "green",
@@ -910,7 +922,7 @@
   {
    "id": 16,
    "type": "stat",
-   "title": "Federação do Prometheus (só monitoramento)",
+   "title": "Federação do Prometheus",
    "description": "Porta 8443 aberta para o nosso Prometheus e NGINX aceitando o nosso certificado.",
    "datasource": {
     "type": "prometheus",
@@ -930,7 +942,7 @@
      },
      "expr": "probe_success{job=\"federation-port\", organization=\"$organization\"} * 2 + on(instance) group_left(organization) (probe_http_status_code{job=\"federation-tls\", organization=\"$organization\"} == bool 200)",
      "refId": "A",
-     "legendFormat": "{{organization}}",
+     "legendFormat": "monitoramento",
      "instant": true,
      "range": false
     }
@@ -948,7 +960,11 @@
     "colorMode": "background",
     "graphMode": "none",
     "justifyMode": "center",
-    "wideLayout": true
+    "wideLayout": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 22
+    }
    },
    "fieldConfig": {
     "defaults": {
