@@ -21,6 +21,9 @@ scrape_configs:
   # Exportador rbb-peers em cada nó Besu (porta 9546): sessões P2P por organização, portas dos peers
   # esperados, disco e memória real do contêiner. Mesmos alvos/rótulos do job rbb, trocando a porta.
   - job_name: rbb-node
+    # O exportador rotula cada peer com a organização DELE; sem honor_labels o rótulo "organization"
+    # do alvo (a nossa organização) sobrescreveria esse e todos os peers apareceriam como nossos.
+    honor_labels: true
     file_sd_configs:
       - files: ["/etc/prometheus/targets/local.json"]
     relabel_configs:
