@@ -14,3 +14,5 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 .env
+__pycache__/
+*.pyc
