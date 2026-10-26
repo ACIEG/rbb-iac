@@ -211,7 +211,7 @@ def collect():
     # rodadas perdidas por validator nos últimos 100 blocos
     try:
         update_missed()
-        counts = {}
+        counts = {a: 0 for a in cons}            # todos os validators do consenso aparecem (0 = nenhuma perdida)
         for _, lst in _missed:
             for a in lst: counts[a] = counts.get(a, 0) + 1
         lines.append(fmt("rbb_rounds_expired_last100", {}, sum(1 for _, l in _missed if l)))
