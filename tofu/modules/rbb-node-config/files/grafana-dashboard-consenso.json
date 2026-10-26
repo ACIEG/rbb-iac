@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 2,
+ "version": 3,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -279,6 +279,84 @@
    "panels": []
   },
   {
+   "id": 8,
+   "type": "piechart",
+   "title": "Fatia de cada validator (últimos 100 blocos)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 7,
+    "w": 10,
+    "h": 9
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "max by (organization) (rbb_blocks_proposed_last100{node=~\"validator.*\"})",
+     "refId": "A",
+     "legendFormat": "{{organization}}",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "pieType": "donut",
+    "displayLabels": [
+     "percent"
+    ],
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "showLegend": true,
+     "values": [
+      "value"
+     ]
+    },
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "tooltip": {
+     "mode": "single"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "unit": "short"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "ACIEG"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "green"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "description": "Mesmo dado das barras, em proporção. Atenção: um validator parado (zero) não aparece na pizza."
+  },
+  {
    "id": 6,
    "type": "bargauge",
    "title": "Blocos propostos por validator, últimos 100",
@@ -287,9 +365,9 @@
     "uid": "prometheus"
    },
    "gridPos": {
-    "x": 0,
+    "x": 10,
     "y": 7,
-    "w": 24,
+    "w": 14,
     "h": 9
    },
    "targets": [
