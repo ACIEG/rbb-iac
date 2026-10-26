@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 3,
+ "version": 4,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -266,13 +266,241 @@
    "description": "Com N validators, propomos um bloco a cada N; mais de ~3N blocos sem propor é sinal de problema."
   },
   {
+   "id": 20,
+   "type": "row",
+   "title": "Rede",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 6,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 21,
+   "type": "stat",
+   "title": "Blocos por minuto",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 0,
+    "y": 7,
+    "w": 6,
+    "h": 5
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "blockchain_block_generation_rate:rate1m * 60",
+     "refId": "A",
+     "legendFormat": "agora",
+     "instant": true,
+     "range": false
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "avg_over_time(blockchain_block_generation_rate:rate1m[24h]) * 60",
+     "refId": "B",
+     "legendFormat": "média 24 h",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value_and_name",
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "wideLayout": true
+   },
+   "fieldConfig": {
+    "defaults": {
+     "decimals": 1,
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 10
+       },
+       {
+        "color": "green",
+        "value": 13
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "description": "A RBB mira um bloco a cada 4 s, ou seja, 15 por minuto. Abaixo disso, rodadas estão expirando (validators faltando na vez)."
+  },
+  {
+   "id": 22,
+   "type": "stat",
+   "title": "Intervalo entre blocos (meta: 4 s)",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 6,
+    "y": 7,
+    "w": 6,
+    "h": 5
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "blockchain_block_generation_interval:rate1m",
+     "refId": "A",
+     "legendFormat": "agora",
+     "instant": true,
+     "range": false
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "textMode": "value",
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "center"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "decimals": 2,
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 5
+       },
+       {
+        "color": "red",
+        "value": 6
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "description": "Tempo médio entre blocos no último minuto. Acima da meta por muito tempo dispara BlockIntervalOffTarget."
+  },
+  {
+   "id": 23,
+   "type": "timeseries",
+   "title": "Blocos por minuto ao longo do tempo",
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "gridPos": {
+    "x": 12,
+    "y": 7,
+    "w": 12,
+    "h": 5
+   },
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "prometheus"
+     },
+     "expr": "blockchain_block_generation_rate:rate1m * 60",
+     "refId": "A",
+     "legendFormat": "blocos/min"
+    }
+   ],
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": false
+    },
+    "tooltip": {
+     "mode": "single"
+    }
+   },
+   "fieldConfig": {
+    "defaults": {
+     "min": 0,
+     "decimals": 1,
+     "color": {
+      "mode": "fixed",
+      "fixedColor": "green"
+     },
+     "custom": {
+      "lineWidth": 2,
+      "fillOpacity": 10,
+      "showPoints": "never"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 15
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "description": "Quedas aqui coincidem com validators parados ou partições de rede."
+  },
+  {
    "id": 5,
    "type": "row",
    "title": "Todos os validators do consenso",
    "collapsed": false,
    "gridPos": {
     "x": 0,
-    "y": 6,
+    "y": 12,
     "w": 24,
     "h": 1
    },
@@ -288,7 +516,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 7,
+    "y": 13,
     "w": 10,
     "h": 9
    },
@@ -366,7 +594,7 @@
    },
    "gridPos": {
     "x": 10,
-    "y": 7,
+    "y": 13,
     "w": 14,
     "h": 9
    },
@@ -439,7 +667,7 @@
    },
    "gridPos": {
     "x": 0,
-    "y": 16,
+    "y": 22,
     "w": 24,
     "h": 8
    },
