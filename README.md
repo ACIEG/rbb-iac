@@ -48,6 +48,8 @@ As **chaves privadas dos nós são geradas na própria VM** e nunca passam pelo 
 - Conta na Magalu Cloud com [API key](https://docs.magalu.cloud/docs/devops-tools/api-keys/overview) e quota para as VMs.
 - `gh` ([GitHub CLI](https://cli.github.com)) autenticado com uma conta **membro da org RBBNet**: o script `rbb-sync-participantes.sh` lê o repositório privado `RBBNet/participantes` (`genesis.json`, `nodes.json`, `docker-compose.yml.hbs`, certificados). Sem esses arquivos os nós são preparados mas o Besu não é iniciado.
 - Chave SSH dos administradores.
+- [dotswap](https://www.npmjs.com/package/dotswap) (`npm install -g dotswap`), ou outro cofre de sua escolha, para guardar os arquivos locais que ficam fora do git (`.env`, `terraform.tfvars`, `backend.tf`, `network/`). O repositório traz um `.dotswap.json` pronto; veja [Arquivos locais e dotswap](#arquivos-locais-e-dotswap).
+- Para a CLI `rbb-status`: Go ≥ 1.24. Para o cofre de chaves de governança (opcional): conta AWS e Node.js ≥ 20.
 
 ## Como adotar na sua organização
 
