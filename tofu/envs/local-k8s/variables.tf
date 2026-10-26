@@ -27,9 +27,11 @@ variable "namespace" {
 }
 
 variable "nodes" {
-  description = "Observers a criar (ver módulo k8s-rbb-stack)."
+  description = "Nós a criar (ver módulo k8s-rbb-stack). Papéis públicos (boot, validator, observer-boot) exigem host e public_ip."
   type = map(object({
     type             = optional(string, "observer")
+    host             = optional(string)
+    public_ip        = optional(string)
     archive          = optional(bool, false)
     rpc_port         = optional(number, 8545)
     metrics_port     = optional(number, 9545)
@@ -46,7 +48,7 @@ variable "nodes" {
 }
 
 variable "static_nodes" {
-  description = "Enodes para os observers. Nulo = observer-boots públicos (deployed/active) de network/nodes.json."
+  description = "Enodes para observers sem observer-boot próprio. Nulo = observer-boots públicos (deployed/active) de network/nodes.json."
   type        = list(string)
   default     = null
 }

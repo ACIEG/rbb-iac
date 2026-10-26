@@ -1,10 +1,36 @@
-# Nós RBB em Kubernetes (Rancher Desktop, k3s, ou qualquer cluster): mesma configuração de Besu
-# do provedor de VMs (rbb-node-config), aplicada como StatefulSet + PVC + ConfigMaps.
+# Nós RBB em Kubernetes: mesma configuração de Besu do provedor de VMs (rbb-node-config), por papel:
+#   boot           hostNetwork + IP público; discovery ligado; genesis com bootnodes = boots externos
+#   validator      hostNetwork + IP público; discovery desligado; static-nodes = validators externos + boots próprios
+#   observer-boot  hostNetwork + IP público; sem permissionamento on chain; contas por arquivo (lista vazia); static-nodes = boots próprios
+#   writer         interno; discovery desligado; static-nodes = boots próprios
+#   observer       interno; sem permissionamento on chain de nós; static-nodes = observer-boots próprios (ou externos)
 locals {
-  labels = { "app.kubernetes.io/part-of" = "rbb", "rbb/organization" = var.organization, "rbb/network" = var.rbb_network }
+  labels      = { "app.kubernetes.io/part-of" = "rbb", "rbb/organization" = var.organization, "rbb/network" = var.rbb_network }
+  public_role = { boot = true, validator = true, "observer-boot" = true, writer = false, observer = false }
 
-  # Variáveis do Besu conforme o docker-compose.yml.hbs do start-network para um observer
-  # (instanciar_observer.md): sem permissionamento on chain de nós, discovery desligado, static-nodes.
+  # enode de cada nó próprio com chave conhecida: público (hostNetwork) ou interno (Service ClusterIP)
+  own_enode = {
+    for k, n in var.nodes : k => "enode://${var.node_keys[k].enode_id}@${local.public_role[n.type] ? n.public_ip : kubernetes_service_v1.node[k].spec[0].cluster_ip}:${n.p2p_port}"
+    if contains(keys(var.node_keys), k)
+  }
+  own_boots          = [for k, n in var.nodes : local.own_enode[k] if n.type == "boot" && contains(keys(local.own_enode), k)]
+  own_observer_boots = [for k, n in var.nodes : local.own_enode[k] if n.type == "observer-boot" && contains(keys(local.own_enode), k)]
+
+  static_nodes = {
+    for k, n in var.nodes : k => (
+      n.type == "validator" ? concat(var.external_validators, local.own_boots) :
+      n.type == "writer" || n.type == "observer-boot" ? local.own_boots :
+      n.type == "observer" ? (length(local.own_observer_boots) > 0 ? local.own_observer_boots : var.external_observer_boots) :
+      []
+    )
+  }
+
+  genesis = jsondecode(var.genesis_json)
+  # Boots: discovery.bootnodes = boots das outras organizações (passo 3 do roteiro)
+  genesis_boot = jsonencode(merge(local.genesis, {
+    config = merge(local.genesis.config, { discovery = { bootnodes = var.external_boots } })
+  }))
+
   base_env = {
     BESU_DATA_PATH                             = "/var/lib/besu"
     BESU_GENESIS_FILE                          = "/etc/rbb/genesis.json"
@@ -22,21 +48,37 @@ locals {
     BESU_METRICS_HOST                          = "0.0.0.0"
     BESU_PERMISSIONS_ACCOUNTS_CONTRACT_ENABLED = "true"
     BESU_PERMISSIONS_ACCOUNTS_CONTRACT_ADDRESS = var.permissioning_contracts.accounts
+    BESU_PERMISSIONS_NODES_CONTRACT_ENABLED    = "true"
     BESU_PERMISSIONS_NODES_CONTRACT_ADDRESS    = var.permissioning_contracts.nodes
     BESU_PERMISSIONS_NODES_CONTRACT_VERSION    = "1"
-    BESU_PERMISSIONS_NODES_CONTRACT_ENABLED    = "false"
-    BESU_DISCOVERY_ENABLED                     = "false"
+  }
+  role_env = {
+    boot      = { BESU_DISCOVERY_ENABLED = "true" }
+    validator = { BESU_DISCOVERY_ENABLED = "false" }
+    writer    = { BESU_DISCOVERY_ENABLED = "false" }
+    # instanciar_observer-boot.md: sem permissionamento on chain; contas por arquivo (lista vazia)
+    "observer-boot" = {
+      BESU_DISCOVERY_ENABLED                        = "true"
+      BESU_PERMISSIONS_ACCOUNTS_CONTRACT_ENABLED    = "false"
+      BESU_PERMISSIONS_NODES_CONTRACT_ENABLED       = "false"
+      BESU_PERMISSIONS_ACCOUNTS_CONFIG_FILE_ENABLED = "true"
+      BESU_PERMISSIONS_ACCOUNTS_CONFIG_FILE         = "/etc/rbb/permissioned-accounts.toml"
+    }
+    # instanciar_observer.md: observer interno sem permissionamento on chain de nós
+    observer = { BESU_DISCOVERY_ENABLED = "false", BESU_PERMISSIONS_NODES_CONTRACT_ENABLED = "false" }
   }
 
   node_env = {
     for k, n in var.nodes : k => merge(
       local.base_env,
+      local.role_env[n.type],
       {
         BESU_RPC_HTTP_PORT = tostring(n.rpc_port)
         BESU_METRICS_PORT  = tostring(n.metrics_port)
         BESU_P2P_PORT      = tostring(n.p2p_port)
         BESU_OPTS          = "-Xmx${n.jvm_heap}"
       },
+      local.public_role[n.type] ? { BESU_P2P_HOST = n.public_ip } : {},
       n.archive ? { BESU_DATA_STORAGE_FORMAT = "FOREST", BESU_SYNC_MODE = "FULL" } : {},
       n.extra_env,
     )
@@ -50,16 +92,32 @@ resource "kubernetes_namespace_v1" "rbb" {
   }
 }
 
-resource "kubernetes_config_map_v1" "network" {
+# Chave de cada nó (de node_keys) como Secret, montada em /var/lib/besu/key
+resource "kubernetes_secret_v1" "key" {
+  for_each = var.node_keys
   metadata {
-    name      = "rbb-network"
+    name      = "${each.key}-key"
     namespace = kubernetes_namespace_v1.rbb.metadata[0].name
-    labels    = local.labels
+    labels    = merge(local.labels, { "rbb/node" = each.key })
   }
-  data = {
-    "genesis.json"      = var.genesis_json
-    "static-nodes.json" = jsonencode(var.static_nodes)
+  data = { key = var.node_private_keys[each.key] }
+}
+
+# Arquivos de rede por nó: genesis (com bootnodes no boot), static-nodes e contas do observer-boot
+resource "kubernetes_config_map_v1" "node" {
+  for_each = var.nodes
+  metadata {
+    name      = "${each.key}-network"
+    namespace = kubernetes_namespace_v1.rbb.metadata[0].name
+    labels    = merge(local.labels, { "rbb/node" = each.key })
   }
+  data = merge(
+    {
+      "genesis.json"      = each.value.type == "boot" ? local.genesis_boot : var.genesis_json
+      "static-nodes.json" = jsonencode(local.static_nodes[each.key])
+    },
+    each.value.type == "observer-boot" ? { "permissioned-accounts.toml" = "accounts-allowlist=[]\n" } : {},
+  )
 }
 
 resource "kubernetes_service_v1" "node" {
@@ -109,7 +167,10 @@ resource "kubernetes_stateful_set_v1" "node" {
         labels = merge(local.labels, { "rbb/node" = each.key, "rbb/type" = each.value.type })
       }
       spec {
-        # imagem oficial roda como usuário besu (uid 1000); o PVC precisa ser gravável por ele
+        # Papéis alcançados pela rede: rede do host num nó dedicado com IP público fixo (P2P TCP/UDP no IP real)
+        host_network  = local.public_role[each.value.type]
+        dns_policy    = local.public_role[each.value.type] ? "ClusterFirstWithHostNet" : "ClusterFirst"
+        node_selector = each.value.host != null ? { "kubernetes.io/hostname" = each.value.host } : {}
         security_context {
           run_as_user  = 1000
           run_as_group = 1000
@@ -151,6 +212,15 @@ resource "kubernetes_stateful_set_v1" "node" {
             mount_path = "/etc/rbb"
             read_only  = true
           }
+          dynamic "volume_mount" {
+            for_each = contains(keys(var.node_keys), each.key) ? [1] : []
+            content {
+              name       = "key"
+              mount_path = "/var/lib/besu/key"
+              sub_path   = "key"
+              read_only  = true
+            }
+          }
           readiness_probe {
             http_get {
               path = "/liveness"
@@ -163,7 +233,17 @@ resource "kubernetes_stateful_set_v1" "node" {
         volume {
           name = "network"
           config_map {
-            name = kubernetes_config_map_v1.network.metadata[0].name
+            name = kubernetes_config_map_v1.node[each.key].metadata[0].name
+          }
+        }
+        dynamic "volume" {
+          for_each = contains(keys(var.node_keys), each.key) ? [1] : []
+          content {
+            name = "key"
+            secret {
+              secret_name  = kubernetes_secret_v1.key[each.key].metadata[0].name
+              default_mode = "0400"
+            }
           }
         }
       }

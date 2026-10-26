@@ -3,8 +3,17 @@ kube_context = "rancher-desktop"
 organization = "ORG1"
 rbb_network  = "lab"
 
-# Um observer de leitura da testnet, com RPC exposto em NodePort 30545 (http://localhost:30545)
+# Laptop: um observer de leitura da testnet, RPC em NodePort 30545 (http://localhost:30545)
 nodes = {
   observer01 = { data_size = "100Gi", container_memory = "6Gi", jvm_heap = "3g", rpc_node_port = 30545 }
-  # observer02 = { archive = true, data_size = "400Gi", container_memory = "8Gi" }   # Forest + FULL (explorador)
 }
+
+# Cluster de verdade (nós dedicados com IP público fixo e firewall do passo 9): topologia completa.
+# As chaves vêm de tools/rbb-keygen (keys/<nó>.key, fora do git); publique os enodes (tofu output nodes) no nodes.json.
+# nodes = {
+#   boot01          = { type = "boot",          host = "k8s-node-a", public_ip = "203.0.113.10" }
+#   validator01     = { type = "validator",     host = "k8s-node-b", public_ip = "203.0.113.11" }
+#   observer-boot01 = { type = "observer-boot", host = "k8s-node-c", public_ip = "203.0.113.12" }
+#   writer01        = { type = "writer" }
+#   observer01      = { type = "observer", archive = true, data_size = "400Gi", container_memory = "8Gi" }
+# }

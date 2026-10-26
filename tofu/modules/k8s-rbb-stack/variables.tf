@@ -29,36 +29,73 @@ variable "genesis_json" {
   type        = string
 }
 
-variable "static_nodes" {
-  description = "Enodes aos quais os observers se conectam (observer-boots públicos da rede, participantes/<rede>/nodes.json)."
+variable "external_boots" {
+  description = "Enodes dos boots das OUTRAS organizações (network/boots.txt): bootnodes do genesis dos nossos boots."
   type        = list(string)
   default     = []
 }
 
-variable "nodes" {
+variable "external_validators" {
+  description = "Enodes dos validators das OUTRAS organizações (network/validators.txt): static-nodes dos nossos validators."
+  type        = list(string)
+  default     = []
+}
+
+variable "external_observer_boots" {
+  description = "Enodes dos observer-boots públicos da rede: static-nodes de observers quando não há observer-boot próprio (ex.: cluster local só com observer)."
+  type        = list(string)
+  default     = []
+}
+
+variable "node_keys" {
   description = <<-EOT
-    Nós a criar, indexados pelo nome (padrão da RBB: observer01, observer02...). Neste provedor só o tipo
-    "observer" (nó de leitura, sem permissionamento on chain de nós, discovery desligado): boot, validator,
-    writer e observer-boot exigem IP público fixo e permissionamento, fora do alcance de um cluster local.
-    archive = true usa Forest + sync FULL (estado histórico completo, para explorador/auditoria).
+    Identidade pública dos nós (geradas com tools/rbb-keygen): enode_id (128 hex) e address. Nós sem entrada
+    aqui (ex.: observer) geram a própria chave no primeiro início e não entram nos static-nodes dos outros.
   EOT
   type = map(object({
-    type             = optional(string, "observer")
+    enode_id = string
+    address  = string
+  }))
+  default = {}
+}
+
+variable "node_private_keys" {
+  description = "Chave privada (0x…32 bytes) por nó, para os mesmos nomes de node_keys. Mantida fora do git."
+  type        = map(string)
+  default     = {}
+  sensitive   = true
+}
+
+variable "nodes" {
+  description = <<-EOT
+    Nós, indexados pelo nome no padrão da RBB (boot01, validator01, writer01, observer-boot01, observer01).
+    Papéis que a rede alcança (boot, validator, observer-boot) rodam na rede do host (hostNetwork) de um nó
+    dedicado do cluster com IP público fixo: informe host (nome do nó Kubernetes) e public_ip; o firewall
+    desse nó (passo 9 do roteiro) é gerenciado fora deste módulo. writer e observer ficam internos (ClusterIP).
+  EOT
+  type = map(object({
+    type             = string
+    host             = optional(string) # nó do cluster (kubernetes.io/hostname) para papéis com hostNetwork
+    public_ip        = optional(string) # IP público anunciado (BESU_P2P_HOST) para boot/validator/observer-boot
     archive          = optional(bool, false)
     rpc_port         = optional(number, 8545)
     metrics_port     = optional(number, 9545)
     p2p_port         = optional(number, 30303)
-    data_size        = optional(string, "100Gi")
+    data_size        = optional(string, "400Gi")
     storage_class    = optional(string)
     container_memory = optional(string, "6Gi")
     container_cpus   = optional(string, "2")
     jvm_heap         = optional(string, "3g")
-    rpc_node_port    = optional(number) # expõe o RPC em NodePort (30000-32767); nulo = só dentro do cluster
+    rpc_node_port    = optional(number) # expõe o RPC em NodePort; nulo = só dentro do cluster
     extra_env        = optional(map(string), {})
   }))
   validation {
-    condition     = alltrue([for n in var.nodes : n.type == "observer"])
-    error_message = "Neste provedor só nós do tipo observer são suportados."
+    condition     = alltrue([for n in var.nodes : contains(["boot", "validator", "writer", "observer-boot", "observer"], n.type)])
+    error_message = "type deve ser boot, validator, writer, observer-boot ou observer."
+  }
+  validation {
+    condition     = alltrue([for k, n in var.nodes : !contains(["boot", "validator", "observer-boot"], n.type) || (n.host != null && n.public_ip != null)])
+    error_message = "boot, validator e observer-boot precisam de host (nó do cluster) e public_ip."
   }
 }
 

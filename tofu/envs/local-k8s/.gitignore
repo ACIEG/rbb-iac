@@ -5,3 +5,4 @@ terraform.tfvars
 tofu.tfplan
 network/*
 !network/README.md
+keys/
