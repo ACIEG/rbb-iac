@@ -8,6 +8,8 @@ Métricas:
   rbb_peer_expected{organization,peer,peer_type,own,in_consensus}             1 por peer em static-nodes / bootnodes
   rbb_peer_port_open{organization,peer,peer_type,own,in_consensus}            1 se a porta P2P do peer esperado aceita TCP
   rbb_consensus_validators                                                    validators no consenso QBFT agora
+  rbb_blocks_proposed_last100{organization,validator,own,address}            blocos propostos por validator nos últimos 100
+  rbb_last_proposed_block{organization,validator,own,address}                 último bloco proposto por validator
   rbb_disk_bytes{mount,kind="total|used"}                        disco raiz e volume de dados
   rbb_besu_memory_anon_bytes / rbb_besu_memory_limit_bytes       memória real (anon) e limite do contêiner
   rbb_node_info{role}                                            papel do nó (boot, validator, writer, observer-boot, observer)
@@ -141,6 +143,21 @@ def collect():
         lab = labels_for(m, ip, port, cons)
         lines.append(fmt("rbb_peer_expected", lab, 1))
         lines.append(fmt("rbb_peer_port_open", lab, port_open(ip, port)))
+    # blocos propostos por validator nos últimos 100 blocos (qbft_getSignerMetrics); nomes pelo mapa (id = address)
+    try:
+        byaddr = {}
+        for lst in m.values():
+            for e in lst:
+                if e.get("id"):
+                    byaddr[e["id"].lower()] = e
+        for sm in rpc("qbft_getSignerMetrics") or []:
+            addr = sm.get("address", "").lower()
+            e = byaddr.get(addr, {})
+            lab = {"organization": e.get("organization", "desconhecida"), "validator": e.get("node", addr[:10]), "own": "true" if e.get("own") else "false", "address": addr}
+            lines.append(fmt("rbb_blocks_proposed_last100", lab, int(sm.get("proposedBlockCount", "0x0"), 16)))
+            lines.append(fmt("rbb_last_proposed_block", lab, int(sm.get("lastProposedBlockNumber", "0x0"), 16)))
+    except Exception as ex:
+        lines.append(f"# qbft_getSignerMetrics falhou: {esc(ex)}")
     # disco
     for mount in sorted({"/", DATA}):
         try:

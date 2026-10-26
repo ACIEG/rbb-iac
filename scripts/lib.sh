@@ -84,7 +84,8 @@ peers_map_json() {
     _PEERS_MAP_CACHE=$(
       {
         if [[ -f "${netdir}/nodes.json" ]]; then
-          jq -c --arg own_org "${orgname}" '[.[] | select(.organization != $own_org) | .organization as $theirs | .nodes[] | select(.ipAddresses != null) | .ipAddresses[] as $addr | {ip: $addr, organization: $theirs, node: .name, type: .nodeType, port: .port, id: (.id // null), own: false}]' "${netdir}/nodes.json"
+          # inclui a própria organização (own=true) para que os nossos nós publicados tenham id/nome no mapa
+          jq -c --arg own_org "${orgname}" '[.[] | .organization as $theirs | .nodes[] | select(.ipAddresses != null) | .ipAddresses[] as $addr | {ip: $addr, organization: $theirs, node: .name, type: .nodeType, port: .port, id: (.id // null), own: ($theirs == $own_org)}]' "${netdir}/nodes.json"
         fi
         nodes_json "${env}" | jq -c --arg own_org "${orgname}" '[to_entries[] | .key as $name | .value as $val | ([$val.private_ip, $val.public_ip] | map(select(. != null and . != ""))[]) as $addr | {ip: $addr, organization: $own_org, node: $name, type: $val.type, port: (($val.p2p_address // "") | split(":") | .[1] // "30303" | tonumber), own: true}]'
       } | jq -s 'add | unique_by([.ip, .port])'
