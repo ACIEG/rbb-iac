@@ -54,6 +54,49 @@ chmod 600 "${PROM_HOME}/grafana/grafana.env"
 chown -R rbb:rbb "${PROM_HOME}"
 chown root:root "${PROM_HOME}/.htpasswd-initial" "${PROM_HOME}/.grafana-admin-initial" 2>/dev/null || true
 
+# Bot de votações (opcional, VOTES_BOT_ENABLED no node.env): clona o código na ref fixada e sobe como serviço próprio
+if [[ "${VOTES_BOT_ENABLED:-false}" == "true" ]]; then
+  BOT_HOME="${DATA_MOUNT}/votes-bot"
+  mkdir -p "${BOT_HOME}"
+  if [[ ! -d "${BOT_HOME}/src/.git" ]]; then
+    git clone -q --depth 1 -b "${VOTES_BOT_REF}" "${VOTES_BOT_REPO}" "${BOT_HOME}/src"
+  else
+    (cd "${BOT_HOME}/src" && git fetch -q --depth 1 origin "${VOTES_BOT_REF}" && git checkout -q FETCH_HEAD)
+  fi
+  (umask 077; cat > "${BOT_HOME}/votes-bot.env" <<BOTENV
+RPC_URL=${VOTES_BOT_RPC_URL}
+GOVERNANCE_ADDRESS=${VOTES_BOT_GOVERNANCE}
+ORGANIZATION_ADDRESS=${VOTES_BOT_ORGANIZATION}
+NODES_JSON=/etc/rbb/nodes.json
+ORG_NAME=${ORGANIZATION_NAME}
+RBB_NETWORK=${VOTES_BOT_NETWORK}
+BOT_NAME=RBB votações
+DISCORD_WEBHOOK_NETWORK=${VOTES_BOT_WEBHOOK_NET}
+DISCORD_WEBHOOK_ORG=${VOTES_BOT_WEBHOOK_ORG}
+BOTENV
+  )
+  [[ -f "${BOT_HOME}/nodes.json" ]] || printf '[]\n' > "${BOT_HOME}/nodes.json"   # atualizado por rbb-link-nodes.sh
+  cat > "${BOT_HOME}/docker-compose.yml" <<BOTCOMPOSE
+services:
+  votes-bot:
+    build: ./src/tools/rbb-votes-bot
+    restart: unless-stopped
+    env_file: ./votes-bot.env
+    volumes:
+      - ./nodes.json:/etc/rbb/nodes.json:ro
+      - votes-bot-state:/var/lib/rbb-votes-bot
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  votes-bot-state:
+BOTCOMPOSE
+  chown -R rbb:rbb "${BOT_HOME}"; chmod 600 "${BOT_HOME}/votes-bot.env"
+  (cd "${BOT_HOME}" && sudo -u rbb -H docker compose up -d --build >/dev/null 2>&1) && echo "[rbb] bot de votações iniciado em ${BOT_HOME}"
+fi
+
 cd "${PROM_HOME}"
 sudo -u rbb -H docker compose up -d
 # nginx.conf é bind mount: recarrega para aplicar mudanças sem recriar o contêiner

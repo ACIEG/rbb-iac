@@ -191,8 +191,20 @@ locals {
     ARCHIVE               = var.node.archive
   }
 
+  votes_bot_env = var.node.type == "prometheus" && var.votes_bot.enabled ? {
+    VOTES_BOT_ENABLED      = "true"
+    VOTES_BOT_RPC_URL      = var.votes_bot.rpc_url
+    VOTES_BOT_GOVERNANCE   = var.votes_bot.governance_address
+    VOTES_BOT_ORGANIZATION = var.votes_bot.organization_address
+    VOTES_BOT_NETWORK      = coalesce(var.votes_bot.network_label, upper(var.rbb_network == "lab" ? "TESTNET" : "PILOTO"))
+    VOTES_BOT_WEBHOOK_NET  = var.votes_bot.webhook_network
+    VOTES_BOT_WEBHOOK_ORG  = var.votes_bot.webhook_org
+    VOTES_BOT_REPO         = var.votes_bot.source_repo
+    VOTES_BOT_REF          = var.votes_bot.source_ref
+  } : { VOTES_BOT_ENABLED = "false" }
+
   node_env_file = join("\n", concat(
-    [for k, v in local.node_env : "${k}=${jsonencode(tostring(v))}"],
+    [for k, v in merge(local.node_env, local.votes_bot_env) : "${k}=${jsonencode(tostring(v))}"],
     # Objeto JSON (valores podem ter espaços e "=", ex.: BESU_OPTS="-Xmx3g -XX:..."); aplicado com jq no infra.json
     ["EXTRA_ENV=${jsonencode(jsonencode(local.extra_env))}"]
   ))
