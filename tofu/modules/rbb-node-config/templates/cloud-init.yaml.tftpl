@@ -81,6 +81,10 @@ write_files:
     permissions: "0644"
     encoding: gz+b64
     content: ${grafana_dashboard_nos}
+  - path: /etc/rbb/prometheus/grafana-dashboard-consenso.json
+    permissions: "0644"
+    encoding: gz+b64
+    content: ${grafana_dashboard_consenso}
   - path: /etc/rbb/prometheus/nginx.conf
     permissions: "0644"
     encoding: gz+b64

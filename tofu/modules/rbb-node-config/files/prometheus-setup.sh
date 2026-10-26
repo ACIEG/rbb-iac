@@ -44,6 +44,7 @@ mkdir -p "${PROM_HOME}/grafana/provisioning/datasources" "${PROM_HOME}/grafana/p
 cp -f /etc/rbb/prometheus/grafana-datasources.yml "${PROM_HOME}/grafana/provisioning/datasources/prometheus.yml"
 cp -f /etc/rbb/prometheus/grafana-dashboards.yml "${PROM_HOME}/grafana/provisioning/dashboards/rbb.yml"
 cp -f /etc/rbb/prometheus/grafana-dashboard-nos.json "${PROM_HOME}/grafana/provisioning/dashboards/rbb-nos.json"
+[[ -f /etc/rbb/prometheus/grafana-dashboard-consenso.json ]] && cp -f /etc/rbb/prometheus/grafana-dashboard-consenso.json "${PROM_HOME}/grafana/provisioning/dashboards/rbb-consenso.json"
 if [[ ! -f "${PROM_HOME}/grafana/grafana.env" ]]; then
   GPW="$(openssl rand -base64 18)"
   printf 'GF_SECURITY_ADMIN_PASSWORD=%s\nGF_SERVER_ROOT_URL=https://%s/grafana/\n' "${GPW}" "${PUBLIC_IP:-${PRIVATE_IP}}" > "${PROM_HOME}/grafana/grafana.env"

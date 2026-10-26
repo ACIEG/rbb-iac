@@ -82,6 +82,18 @@ groups:
     annotations:
       summary: "{{ $labels.node }}: {{ $value | printf \"%.0f\" }} blocos atrás da ponta da rede"
 
+- name: consensus
+  rules:
+  # Nosso validator está no consenso mas não propôs nenhum bloco nos últimos 100: sintoma dos incidentes
+  # de remoção do consenso na RBB. Lido pelo exportador do próprio validator (qbft_getSignerMetrics).
+  - alert: ValidatorNotProposing
+    expr: max by (validator) (rbb_blocks_proposed_last100{own="true"}) == 0 and on() (max(rbb_consensus_validators) > 0)
+    for: 10m
+    labels:
+      severity: critical
+    annotations:
+      summary: "{{ $labels.validator }}: nenhum bloco proposto nos últimos 100 (risco de ser votado para fora do consenso)"
+
 - name: federation
   rules:
   # Sondas do blackbox (jobs federation-port e federation-tls) distinguem a causa.

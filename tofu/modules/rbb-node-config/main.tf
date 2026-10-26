@@ -235,5 +235,6 @@ locals {
     grafana_datasources           = base64gzip(file("${path.module}/files/grafana-datasources.yml"))
     grafana_dashboards            = base64gzip(file("${path.module}/files/grafana-dashboards.yml"))
     grafana_dashboard_nos         = base64gzip(file("${path.module}/files/grafana-dashboard-nos.json"))
+    grafana_dashboard_consenso    = base64gzip(file("${path.module}/files/grafana-dashboard-consenso.json"))
   })
 }
