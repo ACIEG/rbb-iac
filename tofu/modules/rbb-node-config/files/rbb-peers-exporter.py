@@ -193,15 +193,15 @@ def collect():
         lines.append(fmt("rbb_peer_expected", lab, 1))
         lines.append(fmt("rbb_peer_port_open", lab, port_open(ip, port)))
     # nomes por endereço do validator (id no nodes.json)
-    byaddr = {}
+    byaddr = {}                                   # endereço sem 0x, minúsculo -> entrada do mapa
     for lst in m.values():
         for e in lst:
             if e.get("id"):
-                byaddr[e["id"].lower()] = e
+                byaddr[e["id"].lower().replace("0x", "")] = e
     # blocos propostos por validator nos últimos 100 blocos (qbft_getSignerMetrics)
     try:
         for sm in rpc("qbft_getSignerMetrics") or []:
-            addr = sm.get("address", "").lower()
+            addr = sm.get("address", "").lower().replace("0x", "")
             e = byaddr.get(addr, {})
             lab = {"organization": e.get("organization", "desconhecida"), "validator": e.get("node", addr[:10]), "own": "true" if e.get("own") else "false", "address": addr}
             lines.append(fmt("rbb_blocks_proposed_last100", lab, int(sm.get("proposedBlockCount", "0x0"), 16)))

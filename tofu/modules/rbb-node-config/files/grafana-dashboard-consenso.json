@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 6,
+ "version": 7,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -724,7 +724,7 @@
   },
   {
    "id": 41,
-   "type": "bargauge",
+   "type": "stat",
    "title": "Vezes perdidas por validator, últimos 100 blocos",
    "datasource": {
     "type": "prometheus",
@@ -744,15 +744,12 @@
      },
      "expr": "max by (organization, validator) (rbb_missed_rounds_last100{node=~\"validator.*\"})",
      "refId": "A",
-     "legendFormat": "{{organization}} / {{validator}}",
+     "legendFormat": "{{organization}}",
      "instant": true,
      "range": false
     }
    ],
    "options": {
-    "orientation": "horizontal",
-    "displayMode": "gradient",
-    "showUnfilled": true,
     "reduceOptions": {
      "calcs": [
       "lastNotNull"
@@ -760,16 +757,19 @@
      "fields": "",
      "values": false
     },
+    "textMode": "value_and_name",
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "wideLayout": true,
     "text": {
-     "titleSize": 13,
-     "valueSize": 16
+     "titleSize": 14,
+     "valueSize": 26
     }
    },
    "fieldConfig": {
     "defaults": {
-     "min": 0,
-     "max": 10,
-     "noValue": "sem dados do exportador",
+     "noValue": "sem dados",
      "color": {
       "mode": "thresholds"
      },
