@@ -276,6 +276,21 @@ make validate   # tofu validate nos dois ambientes
 make test       # tofu test com provider mockado (topologia, firewall, NAT, proteção de volumes)
 ```
 
+## Provedor Kubernetes (local, Rancher Desktop, k3s)
+
+`tofu/modules/k8s-rbb-stack` sobe nós RBB como StatefulSets num cluster Kubernetes, com a mesma configuração de Besu do provedor de VMs. É pensado para o caso local: um **observer** (nó de leitura) no seu laptop, sincronizando a rede real pelos observer-boots públicos, para desenvolvimento, exploradores e testes de ferramentas sem tocar nos nós de produção. Boot, validator, writer e observer-boot não entram neste provedor: exigem IP público fixo, firewall dos parceiros e permissionamento.
+
+```bash
+cd tofu/envs/local-k8s
+cp terraform.tfvars.example terraform.tfvars        # kube_context = "rancher-desktop", organization, nodes
+cp ../testnet/network/{genesis.json,nodes.json} network/   # ou rode rbb-sync-participantes.sh
+tofu init && tofu plan -out=tofu.tfplan && tofu apply tofu.tfplan
+kubectl -n rbb get pods                              # observer01-0 Running; a sincronização leva horas
+curl -s -X POST -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' http://localhost:30545
+```
+
+Os static-nodes dos observers são os observer-boots públicos (`deployed`/`active`) do `nodes.json`; a chave do nó é gerada pelo Besu no primeiro início e fica no PVC. Memória: o Besu 25.5 usa 2 a 4 GB em regime e mais durante a sincronização inicial; reserve 8 GB no cluster. `archive = true` (Forest + FULL) pede mais disco e memória e é o perfil para um explorador de blocos.
+
 ## Portando para outro provedor
 
 O contrato é simples: implemente um módulo `tofu/modules/<provedor>-rbb-stack` que

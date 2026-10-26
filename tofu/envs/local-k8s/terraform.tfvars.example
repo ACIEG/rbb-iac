@@ -1,0 +1,10 @@
+# Cluster local: Rancher Desktop usa o contexto "rancher-desktop"
+kube_context = "rancher-desktop"
+organization = "ORG1"
+rbb_network  = "lab"
+
+# Um observer de leitura da testnet, com RPC exposto em NodePort 30545 (http://localhost:30545)
+nodes = {
+  observer01 = { data_size = "100Gi", container_memory = "6Gi", jvm_heap = "3g", rpc_node_port = 30545 }
+  # observer02 = { archive = true, data_size = "400Gi", container_memory = "8Gi" }   # Forest + FULL (explorador)
+}
