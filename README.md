@@ -49,6 +49,18 @@ As **chaves privadas dos nós são geradas na própria VM** e nunca passam pelo 
 - `gh` ([GitHub CLI](https://cli.github.com)) autenticado com uma conta **membro da org RBBNet**: o script `rbb-sync-participantes.sh` lê o repositório privado `RBBNet/participantes` (`genesis.json`, `nodes.json`, `docker-compose.yml.hbs`, certificados). Sem esses arquivos os nós são preparados mas o Besu não é iniciado.
 - Chave SSH dos administradores.
 
+## Como adotar na sua organização
+
+Este repositório é genérico e serve a qualquer partícipe. O fluxo recomendado:
+
+1. **Faça um fork** (`<sua-org>/rbb-iac`) e crie nele uma branch da sua organização (ex.: `minha-org`), definida como padrão. `main` fica espelhando este repositório.
+2. **O que é seu fica fora do git**: `tofu/envs/<ambiente>/terraform.tfvars` (nome da organização, chaves SSH, IPs de administração, tamanhos), `backend.tf` (estado remoto), `.env` (credenciais do provedor e do estado) e `tofu/envs/<ambiente>/network/` (arquivos da rede sincronizados do `participantes`). Todos já estão no `.gitignore`; use o [dotswap](#arquivos-locais-e-dotswap) ou outro cofre para não perdê-los.
+3. **Personalizações de código** (ex.: ajustes de painel do Grafana, alertas extras) vão na branch da sua organização, no fork. Evite editar módulos para casos locais: use as variáveis (`nodes`, `extra_env`, `jvm_heap`, `container_memory`...).
+4. **Acompanhe o upstream**: `git fetch upstream && git rebase upstream/main` na sua branch, periodicamente.
+5. **Contribua de volta** o que for genérico (correções, novos provedores, melhorias nos scripts) via pull request para este repositório, sem dados da sua organização: exemplos usam nomes e IPs fictícios.
+
+O painel do Grafana e os alertas já são neutros: "Nossos nós" é a organização que executa, e as demais aparecem nos blocos por organização, a partir do `nodes.json`.
+
 ## Passo a passo
 
 ```bash
