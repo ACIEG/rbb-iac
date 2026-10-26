@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 13,
+ "version": 15,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -31,7 +31,7 @@
    "id": 2,
    "type": "stat",
    "title": "Saúde",
-   "description": "Por papel: validator precisa ver os outros validators; writer/observer-boot/observer precisam do boot próprio; boot precisa de boots parceiros. Também pesa sincronização, reinícios, disco e memória. Motivos nos painéis abaixo.",
+   "description": "Por papel: validator precisa ver os outros validators E estar propondo blocos quando está no consenso; writer/observer-boot/observer precisam do boot próprio; boot precisa de boots parceiros. Também pesa sincronização, reinícios, disco e memória. Motivos nos painéis abaixo e no painel RBB - consenso.",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"

@@ -49,6 +49,9 @@ groups:
     expr: max by (node) (((rbb_disk_bytes{kind="used"} / on(node, mount) rbb_disk_bytes{kind="total"}) > bool 0.95) * 2 + ((rbb_disk_bytes{kind="used"} / on(node, mount) rbb_disk_bytes{kind="total"}) > bool 0.85))
   - record: rbb:health_memory
     expr: max by (node) ((rbb_besu_memory_anon_bytes / on(node) rbb_besu_memory_limit_bytes) > bool 0.9)
+  # Validator no consenso sem propor blocos nos últimos 100: problema (2). Fora do consenso, não se aplica.
+  - record: rbb:health_proposing
+    expr: (max by (node) (rbb_blocks_proposed_last100{own="true"}) == bool 0) * 2 and on(node) max by (node) (rbb_node_info{role="validator"})
   - record: rbb:node_health
     expr: clamp_max(max by (node) ({__name__=~"rbb:health_.+"}), 2)
 
