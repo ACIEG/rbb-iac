@@ -10,6 +10,8 @@ Métricas:
   rbb_consensus_validators                                                    validators no consenso QBFT agora
   rbb_blocks_proposed_last100{organization,validator,own,address}            blocos propostos por validator nos últimos 100
   rbb_last_proposed_block{organization,validator,own,address}                 último bloco proposto por validator
+  rbb_missed_rounds_last100{organization,validator,own,address}              vezes que o validator não propôs na sua vez (rodada expirou), últimos 100 blocos
+  rbb_rounds_expired_last100                                                  blocos fechados em round > 0 nos últimos 100
   rbb_disk_bytes{mount,kind="total|used"}                        disco raiz e volume de dados
   rbb_besu_memory_anon_bytes / rbb_besu_memory_limit_bytes       memória real (anon) e limite do contêiner
   rbb_node_info{role}                                            papel do nó (boot, validator, writer, observer-boot, observer)
@@ -118,6 +120,53 @@ def consensus_set():
     except Exception:
         return set()
 
+# Rodadas perdidas: blocos fechados em round > 0 indicam que o proponente do round 0 (e dos seguintes) não
+# propôs a tempo. No QBFT do Besu o proponente de (altura, round) é validators[(i(proponente do bloco pai) + 1 + round) % n],
+# com validators ordenados por endereço. Mantém uma janela dos últimos 100 blocos, lida incrementalmente.
+import collections
+_missed = collections.deque()      # (bloco, [endereços que perderam a vez])
+_missed_state = {"last": 0, "prev_miner": None}
+
+def rlp_decode(b, i=0):
+    x = b[i]
+    if x < 0x80: return b[i:i+1], i+1
+    if x < 0xb8: l = x-0x80; return b[i+1:i+1+l], i+1+l
+    if x < 0xc0: ll = x-0xb7; l = int.from_bytes(b[i+1:i+1+ll], "big"); s0 = i+1+ll; return b[s0:s0+l], s0+l
+    if x < 0xf8: l = x-0xc0; s0 = i+1
+    else: ll = x-0xf7; l = int.from_bytes(b[i+1:i+1+ll], "big"); s0 = i+1+ll
+    end = s0+l; out = []
+    while s0 < end:
+        v, s0 = rlp_decode(b, s0); out.append(v)
+    return out, end
+
+def block_round(extra_hex):
+    try:
+        items, _ = rlp_decode(bytes.fromhex(extra_hex[2:]))
+        r = items[3]
+        return int.from_bytes(r, "big") if isinstance(r, (bytes, bytearray)) else 0
+    except Exception:
+        return 0
+
+def update_missed():
+    head = int(rpc("eth_blockNumber"), 16)
+    start = _missed_state["last"] + 1 if _missed_state["last"] else max(head - 100, 1)
+    if start > head: return
+    if head - start > 300: start = head - 300           # retomada após parada longa
+    prev = _missed_state["prev_miner"]
+    if prev is None:
+        prev = rpc("eth_getBlockByNumber", [hex(start - 1), False])["miner"].lower()
+    for n in range(start, head + 1):
+        blk = rpc("eth_getBlockByNumber", [hex(n), False])
+        miner = blk["miner"].lower(); rnd = block_round(blk["extraData"]); missed = []
+        if rnd > 0:
+            vals = sorted(a.lower() for a in (rpc("qbft_getValidatorsByBlockNumber", [hex(n - 1)]) or []))
+            if prev in vals and vals:
+                i = vals.index(prev)
+                missed = [vals[(i + 1 + r) % len(vals)] for r in range(rnd)]
+        _missed.append((n, missed)); prev = miner
+    _missed_state.update(last=head, prev_miner=prev)
+    while len(_missed) > 100: _missed.popleft()
+
 def collect():
     t0 = time.time(); lines = [fmt("rbb_node_info", {"role": NTYPE}, 1)]
     m = load_map(); cons = consensus_set()
@@ -143,13 +192,14 @@ def collect():
         lab = labels_for(m, ip, port, cons)
         lines.append(fmt("rbb_peer_expected", lab, 1))
         lines.append(fmt("rbb_peer_port_open", lab, port_open(ip, port)))
-    # blocos propostos por validator nos últimos 100 blocos (qbft_getSignerMetrics); nomes pelo mapa (id = address)
+    # nomes por endereço do validator (id no nodes.json)
+    byaddr = {}
+    for lst in m.values():
+        for e in lst:
+            if e.get("id"):
+                byaddr[e["id"].lower()] = e
+    # blocos propostos por validator nos últimos 100 blocos (qbft_getSignerMetrics)
     try:
-        byaddr = {}
-        for lst in m.values():
-            for e in lst:
-                if e.get("id"):
-                    byaddr[e["id"].lower()] = e
         for sm in rpc("qbft_getSignerMetrics") or []:
             addr = sm.get("address", "").lower()
             e = byaddr.get(addr, {})
@@ -158,6 +208,19 @@ def collect():
             lines.append(fmt("rbb_last_proposed_block", lab, int(sm.get("lastProposedBlockNumber", "0x0"), 16)))
     except Exception as ex:
         lines.append(f"# qbft_getSignerMetrics falhou: {esc(ex)}")
+    # rodadas perdidas por validator nos últimos 100 blocos
+    try:
+        update_missed()
+        counts = {}
+        for _, lst in _missed:
+            for a in lst: counts[a] = counts.get(a, 0) + 1
+        lines.append(fmt("rbb_rounds_expired_last100", {}, sum(1 for _, l in _missed if l)))
+        for addr, c in counts.items():
+            e = byaddr.get(addr, {})
+            lab = {"organization": e.get("organization", "desconhecida"), "validator": e.get("node", addr[:10]), "own": "true" if e.get("own") else "false", "address": addr}
+            lines.append(fmt("rbb_missed_rounds_last100", lab, c))
+    except Exception as ex:
+        lines.append(f"# rodadas perdidas falhou: {esc(ex)}")
     # disco
     for mount in sorted({"/", DATA}):
         try:
