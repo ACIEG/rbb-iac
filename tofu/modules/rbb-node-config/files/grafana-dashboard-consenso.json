@@ -6,7 +6,7 @@
  ],
  "timezone": "browser",
  "schemaVersion": 39,
- "version": 1,
+ "version": 2,
  "editable": false,
  "refresh": "30s",
  "time": {
@@ -60,7 +60,7 @@
      },
      "expr": "rbb:validators_expected",
      "refId": "B",
-     "legendFormat": "no consenso",
+     "legendFormat": "outros no consenso",
      "instant": true,
      "range": false
     }
@@ -96,7 +96,7 @@
     },
     "overrides": []
    },
-   "description": "Validators de outras organizações, no consenso QBFT agora, com sessão P2P ativa com o nosso."
+   "description": "Validators de OUTRAS organizações no consenso QBFT agora e com quantos deles o nosso tem sessão P2P. O nosso não conta a si mesmo."
   },
   {
    "id": 3,
@@ -129,9 +129,9 @@
       "type": "prometheus",
       "uid": "prometheus"
      },
-     "expr": "max(rbb_consensus_validators{node=~\"validator.*\"})",
+     "expr": "round(100 / max(rbb_consensus_validators{node=~\"validator.*\"}))",
      "refId": "B",
-     "legendFormat": "validators no consenso",
+     "legendFormat": "esperado (100 / validators)",
      "instant": true,
      "range": false
     }
@@ -145,7 +145,7 @@
      "values": false
     },
     "textMode": "value_and_name",
-    "colorMode": "background",
+    "colorMode": "value",
     "graphMode": "none",
     "justifyMode": "center",
     "wideLayout": true
@@ -177,33 +177,21 @@
      {
       "matcher": {
        "id": "byName",
-       "options": "validators no consenso"
+       "options": "esperado (100 / validators)"
       },
       "properties": [
        {
         "id": "color",
         "value": {
          "mode": "fixed",
-         "fixedColor": "#6e6e6e"
-        }
-       },
-       {
-        "id": "thresholds",
-        "value": {
-         "mode": "absolute",
-         "steps": [
-          {
-           "color": "#6e6e6e",
-           "value": null
-          }
-         ]
+         "fixedColor": "text"
         }
        }
       ]
      }
     ]
    },
-   "description": "Esperado: cerca de 100 dividido pelo número de validators. Zero por 10 min dispara ValidatorNotProposing."
+   "description": "O QBFT reveza os proponentes em ordem fixa: com N validators no consenso, cada um propõe ~100/N blocos a cada 100. Abaixo disso, estamos perdendo vezes; zero por 10 min dispara ValidatorNotProposing."
   },
   {
    "id": 4,
