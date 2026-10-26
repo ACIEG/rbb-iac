@@ -5,10 +5,10 @@ CLI em Go que mostra, do ponto de vista de um partícipe da Rede Blockchain Bras
 ```bash
 cd tools/rbb-status && go build -o rbb-status .     # Go 1.24+
 
-rbb-status firewall --nodes lab/nodes.json --org ACIEG --role validator --ssh ubuntu@<ip do validator>
+rbb-status firewall --nodes lab/nodes.json --org ORG1 --role validator --ssh ubuntu@<ip do validator>
 rbb-status peers --nodes lab/nodes.json --ssh ubuntu@<ip do boot>
 rbb-status federation --ssh ubuntu@<ip interno do prometheus> --jump ubuntu@<ip do boot>
-rbb-status permissioning --nodes lab/nodes.json --org ACIEG --node-rules 0x<NodeRulesV2Impl> --ssh ubuntu@<ip do boot>
+rbb-status permissioning --nodes lab/nodes.json --org ORG1 --node-rules 0x<NodeRulesV2Impl> --ssh ubuntu@<ip do boot>
 rbb-status report --config rbb-status.json   # tudo, por SSH em cada nó; --json para automação
 ```
 
@@ -18,7 +18,7 @@ Formato de `rbb-status.json` (gerado por `scripts/rbb-status-config.sh` a partir
 
 ```json
 {
-  "org": "ACIEG",
+  "org": "ORG1",
   "nodes_json": "network/nodes.json",
   "node_rules_v2": "0x805c...",
   "hosts": {

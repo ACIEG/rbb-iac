@@ -18,8 +18,8 @@ const sampleNodes = `[
    {"name":"validator09","nodeType":"validator","pubKey":"0xdd","ipAddresses":["200.225.100.9"],"port":60000,"deploymentStatus":"retired","operationalStatus":"inactive"}]},
  {"organization":"PLEXOS","nodes":[
    {"name":"writer01","nodeType":"writer","pubKey":"0xee","ipAddresses":["3.228.137.95"],"port":30303,"deploymentStatus":"deployed","operationalStatus":"active"}]},
- {"organization":"ACIEG","nodes":[
-   {"name":"validator01","nodeType":"validator","pubKey":"0xff","ipAddresses":["201.23.73.56"],"port":30303,"deploymentStatus":"provisioned","operationalStatus":"active"}]}
+ {"organization":"ORG1","nodes":[
+   {"name":"validator01","nodeType":"validator","pubKey":"0xff","ipAddresses":["203.0.113.10"],"port":30303,"deploymentStatus":"provisioned","operationalStatus":"active"}]}
 ]`
 
 func writeSample(t *testing.T) string {
@@ -36,15 +36,15 @@ func TestTargetsForRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v := targetsForRole(orgs, "ACIEG", "validator")
+	v := targetsForRole(orgs, "ORG1", "validator")
 	if len(v) != 1 || v[0].Addr != "200.225.100.83:60000" {
 		t.Fatalf("validators: %+v", v) // exclui o retired e a própria organização
 	}
-	b := targetsForRole(orgs, "ACIEG", "boot")
+	b := targetsForRole(orgs, "ORG1", "boot")
 	if len(b) != 2 { // boot do BNDES + writer público do PLEXOS; writer interno do BNDES fica de fora
 		t.Fatalf("boots: %+v", b)
 	}
-	p := targetsForRole(orgs, "ACIEG", "prometheus")
+	p := targetsForRole(orgs, "ORG1", "prometheus")
 	if len(p) != 1 || p[0].Addr != "200.225.100.83:8443" {
 		t.Fatalf("prometheus: %+v", p)
 	}

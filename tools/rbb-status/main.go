@@ -40,10 +40,10 @@ Opções comuns:
   --json                 saída em JSON
 
 Exemplos:
-  rbb-status firewall --nodes lab/nodes.json --org ACIEG --role validator --ssh ubuntu@201.0.0.1
-  rbb-status peers --nodes lab/nodes.json --ssh ubuntu@201.0.0.1
-  rbb-status federation --ssh ubuntu@10.0.1.61 --jump ubuntu@201.0.0.1
-  rbb-status permissioning --nodes lab/nodes.json --org ACIEG --node-rules 0x805c... --ssh ubuntu@201.0.0.1
+  rbb-status firewall --nodes lab/nodes.json --org ORG1 --role validator --ssh ubuntu@203.0.113.10
+  rbb-status peers --nodes lab/nodes.json --ssh ubuntu@203.0.113.10
+  rbb-status federation --ssh ubuntu@10.0.1.61 --jump ubuntu@203.0.113.10
+  rbb-status permissioning --nodes lab/nodes.json --org ORG1 --node-rules 0x805c... --ssh ubuntu@203.0.113.10
   rbb-status report --config rbb-status.json
 `, version)
 }
