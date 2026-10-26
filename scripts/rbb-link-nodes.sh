@@ -64,6 +64,10 @@ for node in $(nodes_json "${env}" | jq -r 'keys[]'); do
         echo "== ${node}: instalando clients.pem"
         node_ssh "${env}" "${node}" 'cat > /tmp/clients.pem && sudo rbb-node prometheus clients /tmp/clients.pem' < "${netdir}/clients.pem"
       fi
+      if [[ -f "${netdir}/nodes.json" ]]; then
+        # nomes dos validators para o bot de votações (se habilitado); inofensivo se não estiver
+        node_ssh "${env}" "${node}" 'sudo test -d /srv/rbb/votes-bot && cat > /tmp/nodes.json && sudo install -o rbb -g rbb -m 0644 /tmp/nodes.json /srv/rbb/votes-bot/nodes.json || cat > /dev/null' < "${netdir}/nodes.json"
+      fi
       if [[ -f "${netdir}/federation.json" ]]; then
         echo "== ${node}: atualizando alvos federados ($(jq length "${netdir}/federation.json"))"
         jq '[.[] | {targets: [.target], labels: {organization: .organization}}]' "${netdir}/federation.json" \

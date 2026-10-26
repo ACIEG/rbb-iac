@@ -217,3 +217,25 @@ variable "ssh_user" {
   type        = string
   default     = "ubuntu"
 }
+
+variable "votes_bot" {
+  description = <<-EOT
+    Bot de votações da RBB (tools/rbb-votes-bot) no nó prometheus, desligado por padrão. Quando enabled,
+    o bootstrap clona source_repo@source_ref, constrói a imagem e sobe o serviço lendo o RPC do boot da
+    organização (rpc_url) pela VPC. Webhooks do Discord: canal da rede (tudo) e/ou da organização (só o que
+    diz respeito a ela). Basta um bot por rede para o canal da rede; cada organização pode ligar o próprio canal.
+  EOT
+  type = object({
+    enabled              = optional(bool, false)
+    rpc_url              = optional(string, "")
+    governance_address   = optional(string, "")
+    organization_address = optional(string, "")
+    network_label        = optional(string, "")
+    webhook_network      = optional(string, "")
+    webhook_org          = optional(string, "")
+    source_repo          = optional(string, "https://github.com/RBBNet/rbb-iac.git")
+    source_ref           = optional(string, "main")
+  })
+  default   = {}
+  sensitive = true
+}

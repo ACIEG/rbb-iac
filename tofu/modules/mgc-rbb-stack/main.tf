@@ -7,6 +7,7 @@ locals {
   # writer01 = .31, observer-boot01 = .41, observer01 = .51, prometheus01 = .61). Não depende de
   # quais outros nós existem: adicionar ou remover um nó nunca altera o IP dos demais.
   type_ip_base = { boot = 10, validator = 20, writer = 30, "observer-boot" = 40, observer = 50, prometheus = 60 }
+  boot_names   = sort([for k, n in var.nodes : k if n.type == "boot"])
   private_ips = {
     for k, n in var.nodes : k => cidrhost(var.subnet_cidr, coalesce(n.private_ip_offset, local.type_ip_base[n.type] + tonumber(regex("[0-9]{2}$", k))))
   }
@@ -70,7 +71,11 @@ module "node_config" {
   container_cpus        = coalesce(each.value.container_cpus, var.container_cpus)
   container_memory      = coalesce(each.value.container_memory, var.container_memory)
   jvm_heap              = each.value.jvm_heap
-  data_volume           = contains(keys(local.volume_nodes), each.key)
+  # Bot de votações: RPC do primeiro boot da organização pela VPC (IP privado é determinístico, sem ciclo com a VM)
+  votes_bot = merge(var.votes_bot, {
+    rpc_url = try(coalesce(try(var.votes_bot.rpc_url, null), length(local.boot_names) > 0 ? "http://${local.private_ips[local.boot_names[0]]}:8545" : null), "")
+  })
+  data_volume = contains(keys(local.volume_nodes), each.key)
 
   prometheus_targets            = each.value.type == "prometheus" ? local.prometheus_targets : []
   prometheus_federation_targets = each.value.type == "prometheus" ? var.prometheus_federation_targets : []

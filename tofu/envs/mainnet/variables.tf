@@ -193,3 +193,10 @@ variable "prometheus_federation_targets" {
   }))
   default = []
 }
+
+variable "votes_bot" {
+  description = "Bot de votações no nó prometheus (opcional, padrão desligado): enabled, webhook_network, webhook_org, source_ref..."
+  type        = any
+  default     = {}
+  sensitive   = true
+}
