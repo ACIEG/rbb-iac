@@ -276,6 +276,31 @@ make validate   # tofu validate nos dois ambientes
 make test       # tofu test com provider mockado (topologia, firewall, NAT, proteção de volumes)
 ```
 
+## Provedor Kubernetes (Rancher, k3s, qualquer cluster)
+
+`tofu/modules/k8s-rbb-stack` sobe a topologia da RBB como StatefulSets num cluster Kubernetes, com a mesma configuração de Besu, por papel, do provedor de VMs:
+
+| Papel | Rede | Chave | static-nodes / bootnodes |
+|---|---|---|---|
+| boot, validator, observer-boot | `hostNetwork` num nó dedicado do cluster com **IP público fixo** (`host` + `public_ip`); P2P TCP/UDP no IP real, firewall do passo 9 no próprio nó | `tools/rbb-keygen` (estável, fora do git) | boot: bootnodes = `network/boots.txt`; validator: `network/validators.txt` + boot próprio; observer-boot: boot próprio |
+| writer | interno (ClusterIP) | `rbb-keygen` | boot próprio |
+| observer | interno (ClusterIP); RPC por NodePort ou port-forward | gerada pelo Besu no PVC | observer-boots próprios, ou os públicos do `nodes.json` |
+
+O enode e o endereço de cada nó com chave saem em `tofu output nodes`, prontos para o `nodes.json` do `participantes` e para o permissionamento. Armazenamento: um PVC por nó (`data_size`, `storage_class`); use disco local do nó para boot e validator, como nas VMs, porque storage de rede costuma ser o gargalo do RocksDB. Memória: 6 GiB por contêiner com 8 GiB no nó, como no provedor de VMs.
+
+Uso local (Rancher Desktop), só um observer de leitura da testnet:
+
+```bash
+cd tofu/envs/local-k8s
+cp terraform.tfvars.example terraform.tfvars        # kube_context = "rancher-desktop", organization, nodes
+cp ../testnet/network/{genesis.json,nodes.json,boots.txt,validators.txt} network/   # ou rode rbb-sync-participantes.sh
+tofu init && tofu plan -out=tofu.tfplan && tofu apply tofu.tfplan
+kubectl -n rbb get pods                              # observer01-0 Running; a sincronização leva horas
+curl -s -X POST -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' http://localhost:30545
+```
+
+Para um cluster de verdade com a topologia completa, veja o exemplo comentado em `terraform.tfvars.example`: nós do cluster com IP público para boot, validator e observer-boot, e `tools/rbb-keygen` instalado (Go). As chaves ficam em `tofu/envs/<env>/keys/` (ignorado pelo git); guarde-as como guarda as dos nós em VM.
+
 ## Portando para outro provedor
 
 O contrato é simples: implemente um módulo `tofu/modules/<provedor>-rbb-stack` que

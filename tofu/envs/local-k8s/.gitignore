@@ -1,0 +1,8 @@
+terraform.tfvars
+.terraform/
+*.tfstate
+*.tfstate.*
+tofu.tfplan
+network/*
+!network/README.md
+keys/
