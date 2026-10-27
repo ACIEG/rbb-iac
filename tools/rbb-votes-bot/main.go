@@ -29,6 +29,7 @@ type Config struct {
 	BotName          string
 	Network          string
 	DeadlineWarn     time.Duration // aviso de prazo antes de vencer
+	EpochLength      uint64        // qbft.epochlength do genesis: a contagem de votos zera nesses blocos
 }
 
 type Bot struct {
@@ -41,6 +42,16 @@ type Bot struct {
 func env(k, def string) string {
 	if v := os.Getenv(k); v != "" {
 		return v
+	}
+	return def
+}
+
+func envUint(k string, def uint64) uint64 {
+	if v := os.Getenv(k); v != "" {
+		var n uint64
+		if _, err := fmt.Sscan(v, &n); err == nil {
+			return n
+		}
 	}
 	return def
 }
@@ -59,9 +70,10 @@ func main() {
 	flag.StringVar(&cfg.Network, "network", env("RBB_NETWORK", "TESTNET"), "nome da rede nas mensagens")
 	poll := flag.Duration("poll", 30*time.Second, "intervalo entre leituras")
 	warn := flag.Duration("deadline-warn", 24*time.Hour, "aviso de prazo das propostas antes de vencer")
+	epoch := flag.Uint64("epoch", envUint("EPOCH_LENGTH", 30000), "qbft.epochlength do genesis (0 = sem época)")
 	once := flag.Bool("once", false, "executa uma varredura e sai")
 	flag.Parse()
-	cfg.Poll, cfg.DeadlineWarn = *poll, *warn
+	cfg.Poll, cfg.DeadlineWarn, cfg.EpochLength = *poll, *warn, *epoch
 
 	b := &Bot{cfg: cfg, rpc: NewRPC(cfg.RPCURL), state: loadState(cfg.StateFile), names: loadNames(cfg.NodesJSON)}
 	log.Printf("rbb-votes-bot: rpc=%s governance=%s estado=%s (bloco %d)", cfg.RPCURL, cfg.GovernanceAddr, cfg.StateFile, b.state.LastBlock)
@@ -165,48 +177,103 @@ func (b *Bot) tick() error {
 	return nil
 }
 
-// Votos QBFT embutidos nos cabeçalhos: avisa quando um validator passa a votar (ou muda/retira o voto)
+// Votos QBFT embutidos nos cabeçalhos. O Besu mantém um placar (VoteTally) por época:
+// cada validator emite o voto UMA vez (no primeiro bloco que propõe depois de registrá-lo), o voto fica
+// contado até atingir maioria, até o candidato mudar de situação ou até o bloco de época, quando tudo zera.
+// Um bloco sem voto não significa que o validator desistiu: o voto já foi contado. O bot espelha esse placar.
 func (b *Bot) processBlock(n uint64) error {
+	if b.cfg.EpochLength > 0 && n%b.cfg.EpochLength == 0 {
+		b.newEpoch(n)
+		return nil // o Besu ignora qualquer voto embutido no bloco de época
+	}
 	blk, err := b.rpc.Block(n)
 	if err != nil {
 		return err
 	}
-	proposer := strings.ToLower(blk.Miner)
 	v, err := decodeHeaderVote(blk.ExtraData)
-	if err != nil {
-		return nil // bloco sem extraData QBFT: ignora
+	if err != nil || v == nil {
+		return nil // sem extraData QBFT ou sem voto
 	}
-	cur := ""
-	if v != nil {
-		if v.Add {
-			cur = "add:" + v.Candidate
-		} else {
-			cur = "drop:" + v.Candidate
-		}
-	}
-	prev := b.state.HeaderVotes[proposer]
-	if cur == prev {
-		return nil
-	}
-	b.state.HeaderVotes[proposer] = cur
-	switch {
-	case cur == "":
-		b.postNetwork(fmt.Sprintf("🗳️ %s: **%s** retirou o voto pendente (%s). Bloco %d.", b.cfg.Network, b.orgOf(proposer), b.describeVote(prev), n))
-	default:
-		kind, cand := splitVote(cur)
-		tally := b.tallyFor(cur)
-		verb := "ADICIONAR"
-		if kind == "drop" {
-			verb = "REMOVER"
-		}
-		msg := fmt.Sprintf("🗳️ %s: **%s** vota **%s** o validator **%s** — %d de %d necessários. Bloco %d.",
-			b.cfg.Network, b.orgOf(proposer), verb, b.name(cand), tally, b.majority(), n)
+	for _, msg := range b.applyVote(n, strings.ToLower(blk.Miner), v) {
 		b.postNetwork(msg)
-		if b.cfg.OrgName != "" && strings.EqualFold(b.orgOf(cand), b.cfg.OrgName) {
-			b.postOrg(fmt.Sprintf("👀 %s: a **%s** votou para **%s** o nosso validator (%d de %d).", b.cfg.Network, b.orgOf(proposer), strings.ToLower(verb), tally, b.majority()))
+	}
+	if b.cfg.OrgName != "" && strings.EqualFold(b.orgOf(v.Candidate), b.cfg.OrgName) {
+		verb := "adicionar"
+		if !v.Add {
+			verb = "remover"
 		}
+		b.postOrg(fmt.Sprintf("👀 %s: a **%s** votou para **%s** o nosso validator (%d de %d).", b.cfg.Network, b.orgOf(blk.Miner), verb, b.state.count(voteKey(v)), b.majority()))
 	}
 	return nil
+}
+
+func voteKey(v *HeaderVote) string {
+	if v.Add {
+		return "add:" + v.Candidate
+	}
+	return "drop:" + v.Candidate
+}
+
+func opposite(key string) string {
+	kind, cand := splitVote(key)
+	if kind == "add" {
+		return "drop:" + cand
+	}
+	return "add:" + cand
+}
+
+// Aplica um voto ao placar como o VoteTally.addVote do Besu e devolve as mensagens a publicar
+func (b *Bot) applyVote(n uint64, proposer string, v *HeaderVote) []string {
+	key := voteKey(v)
+	if b.state.has(key, proposer) {
+		return nil // já contado nesta época (o Besu não reemite)
+	}
+	switched := b.state.remove(opposite(key), proposer)
+	b.state.addVote(key, proposer)
+	tally, maj := b.state.count(key), b.majority()
+	verb := "ADICIONAR"
+	if !v.Add {
+		verb = "REMOVER"
+	}
+	how := "vota"
+	switch {
+	case switched:
+		how = "muda o voto e agora vota"
+	case b.state.hadBeforeEpoch(key, proposer):
+		how = "mantém o voto (reemitido na nova época) de"
+	}
+	msg := fmt.Sprintf("🗳️ %s: **%s** %s **%s** o validator **%s** — %d de %d necessários. Bloco %d.",
+		b.cfg.Network, b.orgOf(proposer), how, verb, b.name(v.Candidate), tally, maj, n)
+	msgs := []string{msg}
+	if tally >= maj {
+		// maioria: o Besu aplica a mudança e descarta os votos sobre o candidato
+		b.state.discardFor(v.Candidate, !v.Add)
+		msgs = append(msgs, fmt.Sprintf("🔔 %s: maioria atingida para %s **%s**; a mudança no consenso vale a partir do próximo bloco.", b.cfg.Network, strings.ToLower(verb), b.name(v.Candidate)))
+	}
+	return msgs
+}
+
+// Bloco de época: o Besu zera o placar; quem ainda tiver a proposta registrada no nó reemite o voto
+func (b *Bot) newEpoch(n uint64) {
+	pending := b.state.pendingVotes()
+	b.state.PrevEpochTally, b.state.Tally = b.state.Tally, map[string][]string{}
+	if len(pending) == 0 {
+		return
+	}
+	var parts []string
+	for _, pv := range pending {
+		parts = append(parts, fmt.Sprintf("%s (%s)", b.describeVote(pv.key), b.orgList(pv.proposers)))
+	}
+	b.postNetwork(fmt.Sprintf("🔄 %s: nova época no bloco %d, a contagem de votos QBFT foi zerada. Votos descartados: %s. Quem mantiver a proposta no nó reemite o voto no próximo bloco que propuser.",
+		b.cfg.Network, n, strings.Join(parts, "; ")))
+}
+
+func (b *Bot) orgList(addrs []string) string {
+	var out []string
+	for _, a := range addrs {
+		out = append(out, b.orgOf(a))
+	}
+	return strings.Join(out, ", ")
 }
 
 func splitVote(s string) (kind, cand string) {
@@ -222,17 +289,6 @@ func (b *Bot) describeVote(s string) string {
 		return "remover " + b.name(cand)
 	}
 	return "adicionar " + b.name(cand)
-}
-
-// Quantos validators do consenso atual carregam o mesmo voto
-func (b *Bot) tallyFor(vote string) int {
-	n := 0
-	for _, val := range b.state.Validators {
-		if b.state.HeaderVotes[val] == vote {
-			n++
-		}
-	}
-	return n
 }
 
 func (b *Bot) majority() int { return len(b.state.Validators)/2 + 1 }
@@ -270,10 +326,15 @@ func (b *Bot) checkValidators(head uint64) error {
 			}
 		}
 	}
-	// votos pendentes de quem saiu não contam mais
-	for p := range b.state.HeaderVotes {
-		if !cur[p] {
-			delete(b.state.HeaderVotes, p)
+	// como no Besu: votos sobre quem entrou/saiu são descartados; quem saiu deixa de contar como eleitor
+	for _, v := range vals {
+		if !old[v] {
+			b.state.discardFor(v, false)
+		}
+	}
+	for _, v := range b.state.Validators {
+		if !cur[v] {
+			b.state.discardFor(v, true)
 		}
 	}
 	b.state.Validators = vals

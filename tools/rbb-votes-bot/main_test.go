@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/hex"
+	"fmt"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 )
@@ -126,5 +128,45 @@ func TestTopicsAndSelector(t *testing.T) {
 func TestHumanDur(t *testing.T) {
 	if humanDur(30*time.Minute) != "30 min" || humanDur(5*time.Hour) != "5 h" || humanDur(72*time.Hour) != "3 dias" {
 		t.Fatal("formatação de duração")
+	}
+}
+
+// Placar QBFT: voto conta uma vez, reemissão após a época não é "retirada", troca de voto e maioria
+func TestVoteTally(t *testing.T) {
+	b := &Bot{cfg: Config{Network: "T", EpochLength: 100}, state: loadState("/nonexistent/state.json"), names: map[string]string{}}
+	for i := 1; i <= 9; i++ {
+		b.state.Validators = append(b.state.Validators, fmt.Sprintf("0x%040x", i))
+	}
+	cand := "0x" + strings.Repeat("be", 20)
+	drop := &HeaderVote{Candidate: cand, Add: false}
+	p1 := b.state.Validators[0]
+
+	msgs := b.applyVote(10, p1, drop)
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "vota **REMOVER**") || !strings.Contains(msgs[0], "1 de 5") {
+		t.Fatalf("primeiro voto: %v", msgs)
+	}
+	if msgs := b.applyVote(19, p1, drop); msgs != nil {
+		t.Fatalf("voto repetido não deve gerar mensagem: %v", msgs)
+	}
+	// bloco de época zera; a reemissão é informada como manutenção do voto, não como voto novo
+	b.newEpoch(100)
+	if b.state.count("drop:"+cand) != 0 {
+		t.Fatal("época deveria zerar o placar")
+	}
+	msgs = b.applyVote(109, p1, drop)
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "mantém o voto") || !strings.Contains(msgs[0], "1 de 5") {
+		t.Fatalf("reemissão após época: %v", msgs)
+	}
+	// troca de voto
+	msgs = b.applyVote(118, p1, &HeaderVote{Candidate: cand, Add: true})
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "muda o voto") || b.state.count("drop:"+cand) != 0 || b.state.count("add:"+cand) != 1 {
+		t.Fatalf("troca de voto: %v %v", msgs, b.state.Tally)
+	}
+	// maioria: 5 de 9
+	for i := 1; i < 5; i++ {
+		msgs = b.applyVote(uint64(120+i), b.state.Validators[i], &HeaderVote{Candidate: cand, Add: true})
+	}
+	if len(msgs) != 2 || !strings.Contains(msgs[0], "5 de 5") || !strings.Contains(msgs[1], "maioria atingida") || len(b.state.Tally) != 0 {
+		t.Fatalf("maioria: %v %v", msgs, b.state.Tally)
 	}
 }
