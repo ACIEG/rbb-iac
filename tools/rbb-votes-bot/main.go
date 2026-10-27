@@ -194,10 +194,11 @@ func (b *Bot) processBlock(n uint64) error {
 	if err != nil || v == nil {
 		return nil // sem extraData QBFT ou sem voto
 	}
-	for _, msg := range b.applyVote(n, strings.ToLower(blk.Miner), v) {
+	msgs := b.applyVote(n, strings.ToLower(blk.Miner), v)
+	for _, msg := range msgs {
 		b.postNetwork(msg)
 	}
-	if b.cfg.OrgName != "" && strings.EqualFold(b.orgOf(v.Candidate), b.cfg.OrgName) {
+	if len(msgs) > 0 && b.cfg.OrgName != "" && strings.EqualFold(b.orgOf(v.Candidate), b.cfg.OrgName) {
 		verb := "adicionar"
 		if !v.Add {
 			verb = "remover"
@@ -235,16 +236,18 @@ func (b *Bot) applyVote(n uint64, proposer string, v *HeaderVote) []string {
 	if !v.Add {
 		verb = "REMOVER"
 	}
+	var msgs []string
 	how := "vota"
-	switch {
-	case switched:
+	if switched {
 		how = "muda o voto e agora vota"
-	case b.state.hadBeforeEpoch(key, proposer):
-		how = "mantém o voto (reemitido na nova época) de"
 	}
-	msg := fmt.Sprintf("🗳️ %s: **%s** %s **%s** o validator **%s** — %d de %d necessários. Bloco %d.",
-		b.cfg.Network, b.orgOf(proposer), how, verb, b.name(v.Candidate), tally, maj, n)
-	msgs := []string{msg}
+	if !switched && b.state.hadBeforeEpoch(key, proposer) {
+		// reemissão do mesmo voto depois da época: não é novidade, não vai para o canal
+		log.Printf("bloco %d: %s reemitiu o voto %s (%d de %d)", n, b.orgOf(proposer), b.describeVote(key), tally, maj)
+	} else {
+		msgs = append(msgs, fmt.Sprintf("🗳️ %s: **%s** %s **%s** o validator **%s** — %d de %d necessários. Bloco %d.",
+			b.cfg.Network, b.orgOf(proposer), how, verb, b.name(v.Candidate), tally, maj, n))
+	}
 	if tally >= maj {
 		// maioria: o Besu aplica a mudança e descarta os votos sobre o candidato
 		b.state.discardFor(v.Candidate, !v.Add)
@@ -253,7 +256,7 @@ func (b *Bot) applyVote(n uint64, proposer string, v *HeaderVote) []string {
 	return msgs
 }
 
-// Bloco de época: o Besu zera o placar; quem ainda tiver a proposta registrada no nó reemite o voto
+// Bloco de época: o Besu zera o placar; quem ainda tiver a proposta registrada no nó reemite o voto (em silêncio)
 func (b *Bot) newEpoch(n uint64) {
 	pending := b.state.pendingVotes()
 	b.state.PrevEpochTally, b.state.Tally = b.state.Tally, map[string][]string{}
@@ -264,7 +267,7 @@ func (b *Bot) newEpoch(n uint64) {
 	for _, pv := range pending {
 		parts = append(parts, fmt.Sprintf("%s (%s)", b.describeVote(pv.key), b.orgList(pv.proposers)))
 	}
-	b.postNetwork(fmt.Sprintf("🔄 %s: nova época no bloco %d, a contagem de votos QBFT foi zerada. Votos descartados: %s. Quem mantiver a proposta no nó reemite o voto no próximo bloco que propuser.",
+	b.postNetwork(fmt.Sprintf("🔄 %s: nova época no bloco %d, a contagem de votos QBFT foi zerada. Votos descartados: %s. Quem mantiver a proposta no nó reemite o voto automaticamente.",
 		b.cfg.Network, n, strings.Join(parts, "; ")))
 }
 

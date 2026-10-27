@@ -154,8 +154,8 @@ func TestVoteTally(t *testing.T) {
 		t.Fatal("época deveria zerar o placar")
 	}
 	msgs = b.applyVote(109, p1, drop)
-	if len(msgs) != 1 || !strings.Contains(msgs[0], "mantém o voto") || !strings.Contains(msgs[0], "1 de 5") {
-		t.Fatalf("reemissão após época: %v", msgs)
+	if len(msgs) != 0 || b.state.count("drop:"+cand) != 1 {
+		t.Fatalf("reemissão após época deve ser contada em silêncio: %v %v", msgs, b.state.Tally)
 	}
 	// troca de voto
 	msgs = b.applyVote(118, p1, &HeaderVote{Candidate: cand, Add: true})
