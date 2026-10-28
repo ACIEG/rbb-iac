@@ -36,8 +36,8 @@ org="${2:-}"
 if [[ -z "${org}" ]]; then
   tfvars="$(env_dir "${env}")/terraform.tfvars"
   if [[ -f "${tfvars}" ]]; then
-    org="$(grep -E '^\s*organization_name\s*=' "${tfvars}" | sed -E 's/.*=\s*"([^"]+)".*/\1/' | head -1)"
-    [[ -n "${org}" ]] || org="$(grep -E '^\s*organization\s*=' "${tfvars}" | sed -E 's/.*=\s*"([^"]+)".*/\1/' | head -1 | tr '[:lower:]' '[:upper:]')"
+    org="$(grep -E '^[[:space:]]*organization_name[[:space:]]*=' "${tfvars}" | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/' | head -1)"
+    [[ -n "${org}" ]] || org="$(grep -E '^[[:space:]]*organization[[:space:]]*=' "${tfvars}" | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/' | head -1 | tr '[:lower:]' '[:upper:]')"
   fi
 fi
 [[ -n "${org}" ]] || { echo "informe o nome da organização (como em nodes.json) como 2º argumento" >&2; exit 1; }
@@ -66,11 +66,11 @@ fi
 # keep: nó deployed/active, ou ORG/nome presente em include.txt (o nó precisa estar no nodes.json)
 keep="def keep(\$org): (.deploymentStatus == \"deployed\" and .operationalStatus == \"active\") or ((\$org + \"/\" + .name) as \$k | (\$inc | index(\$k)) != null);"
 others=".[] | select(.organization != \$o) | .organization as \$org | .nodes[]"
-jq -r --arg o "${org}" --argjson inc "${include_json}" "${keep} ${others} | select(keep($org) and .nodeType == \"boot\" and .pubKey) | \"enode://\(.pubKey[2:])@\(.ipAddresses[0]):\(.port)\"" \
+jq -r --arg o "${org}" --argjson inc "${include_json}" "${keep} ${others} | select(keep(\$org) and .nodeType == \"boot\" and .pubKey) | \"enode://\(.pubKey[2:])@\(.ipAddresses[0]):\(.port)\"" \
   "${netdir}/nodes.json" > "${netdir}/boots.txt"
-jq -r --arg o "${org}" --argjson inc "${include_json}" "${keep} ${others} | select(keep($org) and .nodeType == \"validator\" and .pubKey) | \"enode://\(.pubKey[2:])@\(.ipAddresses[0]):\(.port)\"" \
+jq -r --arg o "${org}" --argjson inc "${include_json}" "${keep} ${others} | select(keep(\$org) and .nodeType == \"validator\" and .pubKey) | \"enode://\(.pubKey[2:])@\(.ipAddresses[0]):\(.port)\"" \
   "${netdir}/nodes.json" > "${netdir}/validators.txt"
-jq --arg o "${org}" --argjson inc "${include_json}" "${keep} [${others} | select(keep($org) and .nodeType == \"prometheus\" and .port == 8443) | {organization: \$org, target: \"\(.ipAddresses[0]):\(.port)\"}]" \
+jq --arg o "${org}" --argjson inc "${include_json}" "${keep} [${others} | select(keep(\$org) and .nodeType == \"prometheus\" and .port == 8443) | {organization: \$org, target: \"\(.ipAddresses[0]):\(.port)\"}]" \
   "${netdir}/nodes.json" > "${netdir}/federation.json"
 inc_n="$(jq length <<< "${include_json}")"
 [[ "${inc_n}" -eq 0 ]] || echo "   include.txt: ${inc_n} nó(s) incluído(s) fora do critério deployed/active: $(jq -r 'join(", ")' <<< "${include_json}")"
@@ -80,7 +80,7 @@ echo "   boots.txt ($(wc -l < "${netdir}/boots.txt" | tr -d ' ')), validators.tx
 # Todos os IPs documentados de cada nó entram (nós com múltiplos links de saída).
 private='test("^(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|127\\.)")'
 jq --arg o "${org}" --argjson inc "${include_json}" "${keep}
-  def cidrs(f): [${others} | select(keep($org)) | select(f) | .ipAddresses[] | select(${private} | not) | . + \"/32\"] | unique;
+  def cidrs(f): [${others} | select(keep(\$org)) | select(f) | .ipAddresses[] | select(${private} | not) | . + \"/32\"] | unique;
   { validators: cidrs(.nodeType == \"validator\"),
     boots:      cidrs(.nodeType == \"boot\" or .nodeType == \"writer\"),
     prometheus: cidrs(.nodeType == \"prometheus\") }" "${netdir}/nodes.json" > "${netdir}/participants.json"
