@@ -103,7 +103,7 @@ variable "nodes" {
     Campos opcionais por nó: machine_type, data_volume_size (0 = sem volume extra), public_ip (padrão true),
     p2p_public (padrão: true para boot/validator/observer-boot, false para writer), rpc_public, p2p_port, rpc_port,
     metrics_port, extra_env (BESU_*), container_cpus, container_memory, private_ip_offset (host fixo na sub-rede;
-    padrão: base do tipo + sequencial, ex.: validator01 = .21).
+    padrão: base do tipo + sequencial, ex.: validator01 = .21), permissioning_plugin (liga o plugin neste nó).
   EOT
   type = map(object({
     type              = string
@@ -121,6 +121,8 @@ variable "nodes" {
     container_memory  = optional(string)
     jvm_heap          = optional(string)
     private_ip_offset = optional(number)
+    # Liga/desliga o plugin de permissionamento neste nó (nulo = permissioning_plugin.enabled)
+    permissioning_plugin = optional(bool)
   }))
   validation {
     condition     = alltrue([for n in var.nodes : !coalesce(n.p2p_public, contains(["boot", "validator", "observer-boot"], n.type)) || n.public_ip])
@@ -232,6 +234,23 @@ variable "validator_monitor" {
     block_interval   = optional(number, 2000)
     interval_seconds = optional(number, 300)
     image            = optional(string, "node:24-alpine")
+  })
+  default = {}
+}
+
+variable "permissioning_plugin" {
+  description = <<-EOT
+    Plugin de permissionamento on-chain da RBB (RBBNet/besu-permissioning-plugin), que substitui o permissionamento
+    nativo removido do Besu a partir da 25.6. Versões fixadas: imagem do Besu compatível, URL do jar do release e seu SHA-256.
+    enabled liga o plugin nos nós (pode ser sobreposto por nó em nodes[*].permissioning_plugin). A instalação troca a
+    imagem do Besu e monta o jar via docker-compose.override.yml, mantendo chave e banco (rbb-node plugin install).
+    Só para nós já sincronizados: um nó novo com o plugin não consegue sincronizar do gênesis (defeito conhecido do rc.1).
+  EOT
+  type = object({
+    enabled    = optional(bool, false)
+    besu_image = optional(string, "hyperledger/besu:25.12.0@sha256:4ef9e934bb321d916ff245981fd65100dc41446b26b2bed47a2b7d09139a3cbe")
+    jar_url    = optional(string, "https://github.com/RBBNet/besu-permissioning-plugin/releases/download/v1.0.0-rc.1/besu-plugin-permissioning.jar")
+    jar_sha256 = optional(string, "5d7eebac3de229fd5940fe919a9535c8aeab2be5108dc1bd2231a07ba33955bd")
   })
   default = {}
 }
