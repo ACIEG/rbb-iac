@@ -249,9 +249,29 @@ func (b *Bot) applyVote(n uint64, proposer string, v *HeaderVote) []string {
 			b.cfg.Network, b.orgOf(proposer), how, verb, b.name(v.Candidate), tally, maj, n))
 	}
 	if tally >= maj {
-		// maioria: o Besu aplica a mudança e descarta os votos sobre o candidato
+		// maioria: o Besu aplica a mudança já neste bloco e descarta os votos sobre o candidato
 		b.state.discardFor(v.Candidate, !v.Add)
+		b.state.setValidator(v.Candidate, v.Add)
 		msgs = append(msgs, fmt.Sprintf("🔔 %s: maioria atingida para %s **%s**; a mudança no consenso vale a partir do próximo bloco.", b.cfg.Network, strings.ToLower(verb), b.name(v.Candidate)))
+		msgs = append(msgs, b.setChangeMessages(v.Candidate, v.Add, n)...)
+	}
+	return msgs
+}
+
+// Mensagens de entrada/saída do consenso (canal da rede e, se for o nosso, da organização)
+func (b *Bot) setChangeMessages(cand string, joined bool, n uint64) []string {
+	var msgs []string
+	if joined {
+		msgs = append(msgs, fmt.Sprintf("✅ %s: validator **%s** ENTROU no consenso. Agora são %d validators. Bloco %d.", b.cfg.Network, b.name(cand), len(b.state.Validators), n))
+	} else {
+		msgs = append(msgs, fmt.Sprintf("⚠️ %s: validator **%s** SAIU do consenso. Agora são %d validators. Bloco %d.", b.cfg.Network, b.name(cand), len(b.state.Validators), n))
+	}
+	if b.cfg.OrgName != "" && strings.EqualFold(b.orgOf(cand), b.cfg.OrgName) {
+		if joined {
+			b.postOrg(fmt.Sprintf("🎉 %s: o nosso validator entrou no consenso (bloco %d).", b.cfg.Network, n))
+		} else {
+			b.postOrg(fmt.Sprintf("🚨 %s: o nosso validator SAIU do consenso (bloco %d). Verifique o nó e peça nova votação.", b.cfg.Network, n))
+		}
 	}
 	return msgs
 }
@@ -296,11 +316,15 @@ func (b *Bot) describeVote(s string) string {
 
 func (b *Bot) majority() int { return len(b.state.Validators)/2 + 1 }
 
-// Mudanças no conjunto de validators
+// Reconciliação do conjunto de validators com o nó. As mudanças normais são vistas bloco a bloco em
+// applyVote (maioria); aqui só entra o que escapou (lacuna de blocos, primeira execução), sem mexer no placar.
 func (b *Bot) checkValidators(head uint64) error {
 	vals, err := b.rpc.Validators(head)
 	if err != nil {
 		return err
+	}
+	for i := range vals {
+		vals[i] = strings.ToLower(vals[i])
 	}
 	sort.Strings(vals)
 	if len(b.state.Validators) == 0 {
@@ -314,33 +338,25 @@ func (b *Bot) checkValidators(head uint64) error {
 	cur := map[string]bool{}
 	for _, v := range vals {
 		cur[v] = true
-		if !old[v] {
-			b.postNetwork(fmt.Sprintf("✅ %s: validator **%s** ENTROU no consenso. Agora são %d validators. Bloco %d.", b.cfg.Network, b.name(v), len(vals), head))
-			if b.cfg.OrgName != "" && strings.EqualFold(b.orgOf(v), b.cfg.OrgName) {
-				b.postOrg(fmt.Sprintf("🎉 %s: o nosso validator entrou no consenso (bloco %d).", b.cfg.Network, head))
-			}
-		}
 	}
-	for _, v := range b.state.Validators {
-		if !cur[v] {
-			b.postNetwork(fmt.Sprintf("⚠️ %s: validator **%s** SAIU do consenso. Agora são %d validators. Bloco %d.", b.cfg.Network, b.name(v), len(vals), head))
-			if b.cfg.OrgName != "" && strings.EqualFold(b.orgOf(v), b.cfg.OrgName) {
-				b.postOrg(fmt.Sprintf("🚨 %s: o nosso validator SAIU do consenso (bloco %d). Verifique o nó e peça nova votação.", b.cfg.Network, head))
-			}
-		}
-	}
-	// como no Besu: votos sobre quem entrou/saiu são descartados; quem saiu deixa de contar como eleitor
+	var msgs []string
 	for _, v := range vals {
 		if !old[v] {
-			b.state.discardFor(v, false)
+			b.state.Validators = vals
+			msgs = append(msgs, b.setChangeMessages(v, true, head)...)
 		}
 	}
 	for _, v := range b.state.Validators {
 		if !cur[v] {
-			b.state.discardFor(v, true)
+			b.state.Validators = vals
+			msgs = append(msgs, b.setChangeMessages(v, false, head)...)
+			b.state.discardFor(v, true) // quem saiu deixa de contar como eleitor
 		}
 	}
 	b.state.Validators = vals
+	for _, m := range msgs {
+		b.postNetwork(m)
+	}
 	return nil
 }
 

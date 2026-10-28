@@ -166,7 +166,12 @@ func TestVoteTally(t *testing.T) {
 	for i := 1; i < 5; i++ {
 		msgs = b.applyVote(uint64(120+i), b.state.Validators[i], &HeaderVote{Candidate: cand, Add: true})
 	}
-	if len(msgs) != 2 || !strings.Contains(msgs[0], "5 de 5") || !strings.Contains(msgs[1], "maioria atingida") || len(b.state.Tally) != 0 {
-		t.Fatalf("maioria: %v %v", msgs, b.state.Tally)
+	if len(msgs) != 3 || !strings.Contains(msgs[0], "5 de 5") || !strings.Contains(msgs[1], "maioria atingida") || !strings.Contains(msgs[2], "ENTROU") || !strings.Contains(msgs[2], "10 validators") || len(b.state.Tally) != 0 || len(b.state.Validators) != 10 {
+		t.Fatalf("maioria: %v %v %v", msgs, b.state.Tally, b.state.Validators)
+	}
+	// voto de remoção logo depois da entrada (resto antigo reemitido pelo Besu): conta com a maioria nova e não é apagado
+	msgs = b.applyVote(130, b.state.Validators[5], &HeaderVote{Candidate: cand, Add: false})
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "1 de 6") || b.state.count("drop:"+cand) != 1 {
+		t.Fatalf("voto após a entrada: %v %v", msgs, b.state.Tally)
 	}
 }

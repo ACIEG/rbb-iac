@@ -126,3 +126,18 @@ func (s *State) pendingVotes() []pendingVote {
 	sort.Slice(out, func(i, j int) bool { return out[i].key < out[j].key })
 	return out
 }
+
+// setValidator aplica a entrada/saída de um validator no conjunto conhecido (ordenado)
+func (s *State) setValidator(addr string, in bool) {
+	var out []string
+	for _, v := range s.Validators {
+		if v != addr {
+			out = append(out, v)
+		}
+	}
+	if in {
+		out = append(out, addr)
+	}
+	sort.Strings(out)
+	s.Validators = out
+}
