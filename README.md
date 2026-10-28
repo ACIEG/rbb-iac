@@ -92,7 +92,7 @@ cd rbb-iac
 ./scripts/rbb-ssh.sh testnet validator01 sudo rbb-node status
 ```
 
-O script `rbb-sync-participantes.sh` só considera nós das **outras** organizações com `deploymentStatus = deployed` e `operationalStatus = active`, usando o primeiro IP documentado. Repita-o (e depois `rbb-link-nodes.sh`) sempre que o `nodes.json` mudar.
+O script `rbb-sync-participantes.sh` só considera nós das **outras** organizações com `deploymentStatus = deployed` e `operationalStatus = active`, usando o primeiro IP documentado. Para incluir nós que ainda não estão nesse estado mas já devem ser liberados e cadastrados (migração de VMs de um partícipe, em que os conjuntos antigo e novo coexistem a pedido em issue da RBB), liste-os em `network/include.txt`, um por linha, como `ORGANIZACAO/nome` (ex.: `PRODEMGE/validator02`); remova as linhas quando o partícipe avisar que os nós antigos saíram. Repita o script (e depois `rbb-link-nodes.sh`, e `tofu apply` para o firewall) sempre que o `nodes.json` ou o `include.txt` mudar.
 
 O script `rbb-link-nodes.sh` implementa as regras do roteiro para partícipe associado:
 

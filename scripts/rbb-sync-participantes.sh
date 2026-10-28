@@ -16,6 +16,11 @@
 #                              observadores, mas não são peers dos boots.
 #   clients.pem             <- certificados concatenados de participantes/<rede>/certificados
 #
+# Nós de outras organizações que ainda não estão deployed/active no nodes.json mas já devem ser
+# considerados (migração de VMs com coexistência, pedido em issue da RBB): liste-os em
+# tofu/envs/<env>/network/include.txt, um por linha, como ORGANIZACAO/nome (ex.: PRODEMGE/validator02).
+# Linhas iniciadas por # são ignoradas.
+#
 # Uso: ./scripts/rbb-sync-participantes.sh <testnet|mainnet> [NOME-DA-ORGANIZACAO]
 #   NOME-DA-ORGANIZACAO: como consta em nodes.json (ex.: BNDES). Padrão: variável
 #   organization_name/organization do terraform.tfvars do ambiente, em maiúsculas.
@@ -53,21 +58,29 @@ if ! jq -e --arg o "${org}" 'map(.organization) | index($o)' "${netdir}/nodes.js
   echo "   AVISO: '${org}' ainda não consta em nodes.json (normal antes do passo 6 do roteiro). Organizações: $(jq -r 'map(.organization) | join(", ")' "${netdir}/nodes.json")"
 fi
 
-# Nós ativos das outras organizações. Usa o primeiro IP documentado.
-active='.deploymentStatus == "deployed" and .operationalStatus == "active"'
-jq -r --arg o "${org}" ".[] | select(.organization != \$o) | .nodes[] | select(${active} and .nodeType == \"boot\" and .pubKey) | \"enode://\(.pubKey[2:])@\(.ipAddresses[0]):\(.port)\"" \
+# Nós ativos das outras organizações (ou listados em include.txt). Usa o primeiro IP documentado.
+include_json='[]'
+if [[ -f "${netdir}/include.txt" ]]; then
+  include_json="$(grep -v '^\s*#' "${netdir}/include.txt" | sed 's/[[:space:]]//g' | grep -v '^$' | jq -Rn '[inputs]')"
+fi
+# keep: nó deployed/active, ou ORG/nome presente em include.txt (o nó precisa estar no nodes.json)
+keep="def keep(\$org): (.deploymentStatus == \"deployed\" and .operationalStatus == \"active\") or ((\$org + \"/\" + .name) as \$k | (\$inc | index(\$k)) != null);"
+others=".[] | select(.organization != \$o) | .organization as \$org | .nodes[]"
+jq -r --arg o "${org}" --argjson inc "${include_json}" "${keep} ${others} | select(keep($org) and .nodeType == \"boot\" and .pubKey) | \"enode://\(.pubKey[2:])@\(.ipAddresses[0]):\(.port)\"" \
   "${netdir}/nodes.json" > "${netdir}/boots.txt"
-jq -r --arg o "${org}" ".[] | select(.organization != \$o) | .nodes[] | select(${active} and .nodeType == \"validator\" and .pubKey) | \"enode://\(.pubKey[2:])@\(.ipAddresses[0]):\(.port)\"" \
+jq -r --arg o "${org}" --argjson inc "${include_json}" "${keep} ${others} | select(keep($org) and .nodeType == \"validator\" and .pubKey) | \"enode://\(.pubKey[2:])@\(.ipAddresses[0]):\(.port)\"" \
   "${netdir}/nodes.json" > "${netdir}/validators.txt"
-jq --arg o "${org}" "[.[] | select(.organization != \$o) | .organization as \$org | .nodes[] | select(${active} and .nodeType == \"prometheus\" and .port == 8443) | {organization: \$org, target: \"\(.ipAddresses[0]):\(.port)\"}]" \
+jq --arg o "${org}" --argjson inc "${include_json}" "${keep} [${others} | select(keep($org) and .nodeType == \"prometheus\" and .port == 8443) | {organization: \$org, target: \"\(.ipAddresses[0]):\(.port)\"}]" \
   "${netdir}/nodes.json" > "${netdir}/federation.json"
+inc_n="$(jq length <<< "${include_json}")"
+[[ "${inc_n}" -eq 0 ]] || echo "   include.txt: ${inc_n} nó(s) incluído(s) fora do critério deployed/active: $(jq -r 'join(", ")' <<< "${include_json}")"
 echo "   boots.txt ($(wc -l < "${netdir}/boots.txt" | tr -d ' ')), validators.txt ($(wc -l < "${netdir}/validators.txt" | tr -d ' ')), federation.json ($(jq length "${netdir}/federation.json"))"
 
 # IPs por papel para firewall (roteiro, passo 9). Writers com IP público são de partícipes parceiros.
 # Todos os IPs documentados de cada nó entram (nós com múltiplos links de saída).
 private='test("^(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|127\\.)")'
-jq --arg o "${org}" "
-  def cidrs(f): [.[] | select(.organization != \$o) | .nodes[] | select(${active}) | select(f) | .ipAddresses[] | select(${private} | not) | . + \"/32\"] | unique;
+jq --arg o "${org}" --argjson inc "${include_json}" "${keep}
+  def cidrs(f): [${others} | select(keep($org)) | select(f) | .ipAddresses[] | select(${private} | not) | . + \"/32\"] | unique;
   { validators: cidrs(.nodeType == \"validator\"),
     boots:      cidrs(.nodeType == \"boot\" or .nodeType == \"writer\"),
     prometheus: cidrs(.nodeType == \"prometheus\") }" "${netdir}/nodes.json" > "${netdir}/participants.json"
