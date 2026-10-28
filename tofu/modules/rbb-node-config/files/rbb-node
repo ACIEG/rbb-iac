@@ -46,6 +46,12 @@ Operação (passo 4 do roteiro)
   watchdog                  reconecta peers estáticos ausentes (admin_addPeer); reinicia o Besu de forma controlada
                             acima de 93% da memória do contêiner (1x/6h) ou se ficar sem peers por 2 verificações (cron 5 min)
 
+Monitoração automática de validators (somente validator; RBBNet/monitoracao-validadores)
+  validator-monitor install   baixa o código (VALIDATOR_MONITOR_REPO@REF do node.env) e sobe o monitor apontando para o RPC local
+  validator-monitor status    estado do contêiner e propostas de voto pendentes no nó (qbft_getPendingVotes)
+  validator-monitor logs [-f] logs do monitor
+  validator-monitor remove    para e remove o monitor (o código fica em ${DATA_MOUNT}/validator-monitor)
+
 Prometheus (somente nós prometheus)
   prometheus clients <arquivo.pem>      instala o bundle de certificados dos demais partícipes e recarrega o NGINX
   prometheus federation <arquivo.json>  substitui os alvos federados (formato file_sd: [{targets:[...],labels:{organization}}])
@@ -255,6 +261,56 @@ cmd_prometheus() {
   esac
 }
 
+# Monitoração automática de validators: cada partícipe roda um agente junto ao seu validator que vota
+# (qbft_proposeValidatorVote) pela exclusão de quem parou de propor blocos. Código de referência da RBB,
+# executado em contêiner Node na rede do host, apontando para o RPC local do validator (único destino válido).
+MON_DIR="${DATA_MOUNT}/validator-monitor"
+as_rbb_mon() { sudo -u rbb -H bash -c "cd '${MON_DIR}' && $*"; }
+cmd_validator_monitor() {
+  [[ "${NODE_TYPE}" == "validator" ]] || { echo "somente para nós validator" >&2; exit 1; }
+  case "${1:-}" in
+    install)
+      local repo="${VALIDATOR_MONITOR_REPO:-RBBNet/monitoracao-validadores}" ref="${VALIDATOR_MONITOR_REF:-main}"
+      local image="${VALIDATOR_MONITOR_IMAGE:-node:24-alpine}"
+      mkdir -p "${MON_DIR}"
+      echo "baixando ${repo}@${ref}"
+      rm -rf "${MON_DIR}/src.new" && mkdir -p "${MON_DIR}/src.new"
+      curl -fsSL "https://github.com/${repo}/archive/${ref}.tar.gz" | tar xz -C "${MON_DIR}/src.new" --strip-components=1
+      [[ -f "${MON_DIR}/src.new/main.js" && -f "${MON_DIR}/src.new/monitoring.js" ]] || { echo "código inesperado em ${repo}@${ref} (sem main.js/monitoring.js)" >&2; exit 1; }
+      rm -rf "${MON_DIR}/src" && mv "${MON_DIR}/src.new" "${MON_DIR}/src"
+      printf '%s@%s\n' "${repo}" "${ref}" > "${MON_DIR}/src/.rbb-source"
+      cat > "${MON_DIR}/docker-compose.yml" <<COMPOSE
+services:
+  monitor:
+    image: ${image}
+    container_name: rbb-validator-monitor
+    network_mode: host
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./src:/app
+    environment:
+      JSON_RPC_URL: http://127.0.0.1:${RPC_PORT}
+      VALIDATOR_MONITORING_BLOCK_INTERVAL: "${VALIDATOR_MONITOR_BLOCK_INTERVAL:-2000}"
+      VALIDATOR_MONITORING_INTERVAL_SECONDS: "${VALIDATOR_MONITOR_INTERVAL_SECONDS:-300}"
+    command: ["node", "main.js"]
+COMPOSE
+      chown -R rbb:rbb "${MON_DIR}"
+      echo "instalando dependências (npm)"
+      as_rbb_mon "docker run --rm -v '${MON_DIR}/src:/app' -w /app '${image}' npm install --omit=dev --no-audit --no-fund --loglevel=error"
+      as_rbb_mon "docker compose up -d --force-recreate"
+      echo "monitor no ar: rbb-node validator-monitor status" ;;
+    status)
+      [[ -f "${MON_DIR}/docker-compose.yml" ]] || { echo "monitor não instalado (rbb-node validator-monitor install)"; exit 1; }
+      echo "código: $(cat "${MON_DIR}/src/.rbb-source" 2>/dev/null || echo '?')"
+      as_rbb_mon "docker compose ps --format '{{.Name}} {{.Status}}'"
+      echo "propostas de voto pendentes neste nó: $(rpc qbft_getPendingVotes | jq -c '.result // .error')" ;;
+    logs)   shift; as_rbb_mon "docker compose logs $*" ;;
+    remove) [[ -f "${MON_DIR}/docker-compose.yml" ]] && as_rbb_mon "docker compose down"; echo "monitor removido" ;;
+    *) usage; exit 1 ;;
+  esac
+}
+
 case "${1:-}" in
   info)      cmd_info ;;
   enode)     shift; cmd_enode "$@" ;;
@@ -274,6 +330,7 @@ case "${1:-}" in
   jfr-clean) cmd_jfr_clean ;;
   watchdog)  cmd_watchdog ;;
   prometheus) shift; cmd_prometheus "$@" ;;
+  validator-monitor) shift; cmd_validator_monitor "$@" ;;
   -h|--help|help|"") usage ;;
   *) usage; exit 1 ;;
 esac

@@ -149,6 +149,7 @@ Em qualquer VM, como root (`sudo rbb-node`):
 | `prometheus reload` (após `rbb-update-tools.sh`) | o nó prometheus traz também um blackbox exporter que sonda a porta 8443 de cada parceiro (job `federation-port`) e a aceitação do nosso certificado (job `federation-tls`), gerando os alertas `FederationFirewallClosed` e `FederationCertificateRejected` |
 | `watchdog` | a cada 5 min (cron): reenvia `admin_addPeer` para os peers de `static-nodes.json` que não estão conectados (o Besu 25.5 nem sempre volta a tentar sozinho); reinicia o Besu de forma controlada quando a memória real do contêiner passa de 93% do limite (no máximo 1x a cada 6 h, evitando a morte abrupta pelo kernel); e reinicia se o nó ficar sem nenhum peer em duas verificações seguidas |
 | `jfr-clean` | remove gravações antigas do Java Flight Recorder no `/tmp` do contêiner (o bootstrap instala um cron horário) |
+| `validator-monitor install\|status\|logs\|remove` | monitoração automática de validators (ver abaixo), só em nós validator |
 | `prometheus clients <pem>` / `prometheus federation <json>` / `prometheus reload` | nós prometheus |
 
 Do lado local, `scripts/rbb-ssh-keys.sh <env> show|set|add|remove` gerencia as chaves SSH autorizadas em todos os nós, e `scripts/rbb-update-tools.sh <env> [--rerun-setup]` envia versões novas do `rbb-node`/bootstrap para as VMs sem recriá-las (o bootstrap é idempotente e migra os dados para o volume caso ele tenha sido anexado depois do primeiro boot).
@@ -158,6 +159,24 @@ O layout na VM é o mesmo do roteiro: `/srv/rbb/start-network/` (rbb-cli, `infra
 ## Grafana
 
 O nó prometheus traz um Grafana em `https://<ip-do-prometheus>/grafana/` (mesmo certificado do NGINX; login próprio, usuário `admin`, senha inicial em `/srv/rbb/prometheus/.grafana-admin-initial`, legível só por root). A fonte de dados e os painéis são provisionados a partir deste repositório (`files/grafana-*`): há dois painéis: **RBB - consenso** (quantos validators o nosso vê, blocos propostos por validator nos últimos 100, nossa fatia e último bloco proposto; alerta `ValidatorNotProposing` quando o nosso validator para de propor) e **RBB - nós e federação**, que mostra distância da ponta, peers, reinícios, altura e memória dos nossos nós, o estado da federação por organização (porta e certificado) e os alertas ativos. Painéis criados pela interface não são versionados; para mudar o padrão, edite o JSON e reenvie com `rbb-update-tools.sh`.
+
+## Monitoração automática de validators
+
+A RBB espera que cada partícipe rode, junto ao seu validator, o agente de referência [RBBNet/monitoracao-validadores](https://github.com/RBBNet/monitoracao-validadores): a cada 5 minutos ele consulta `qbft_getSignerMetrics` dos últimos 2000 blocos e vota (`qbft_proposeValidatorVote`) pela exclusão de quem não propôs nenhum bloco, sem deixar a rede abaixo de 4 validators. Como a proposta de voto fica registrada no nó até ser descartada ou até o Besu reiniciar, e o Besu a reemite a cada época, o agente deve também descartar as propostas já cumpridas (há PR para isso no repositório de referência).
+
+Para ativar, na variável `validator_monitor` do ambiente:
+
+```hcl
+validator_monitor = {
+  enabled = true
+  # repo = "RBBNet/monitoracao-validadores"   # owner/repo no GitHub
+  # ref  = "main"                             # branch, tag ou commit
+}
+```
+
+O bootstrap instala o monitor nos nós validator como contêiner Node (`node:24-alpine`) na rede do host, apontando para o RPC local do validator, que é o único destino válido (apontar para boot, writer ou observer não produz voto). Em um validator já provisionado, envie o `rbb-node` novo com `rbb-update-tools.sh`, acrescente as variáveis `VALIDATOR_MONITOR_*` ao `/etc/rbb/node.env` e rode `sudo rbb-node validator-monitor install`. `rbb-node validator-monitor status` mostra o contêiner e as propostas de voto pendentes no nó.
+
+Esse mecanismo vale enquanto a rede usar a seleção de validators por votação nos cabeçalhos (modo `blockheader` do QBFT). A RBB prepara a [seleção de validators on-chain](https://github.com/RBBNet/selecao-validadores), com um agente diferente; quando a transição ocorrer, este componente será substituído.
 
 ## Armazenamento do Besu: Bonsai ou Forest
 

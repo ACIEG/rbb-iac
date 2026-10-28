@@ -189,6 +189,13 @@ locals {
     DATA_VOLUME           = var.data_volume
     HAS_GENESIS           = var.genesis_json != null
     ARCHIVE               = var.node.archive
+    # Monitoração automática de validators (só tem efeito em nós validator; ver rbb-node validator-monitor)
+    VALIDATOR_MONITOR_ENABLED          = var.validator_monitor.enabled
+    VALIDATOR_MONITOR_REPO             = var.validator_monitor.repo
+    VALIDATOR_MONITOR_REF              = var.validator_monitor.ref
+    VALIDATOR_MONITOR_BLOCK_INTERVAL   = var.validator_monitor.block_interval
+    VALIDATOR_MONITOR_INTERVAL_SECONDS = var.validator_monitor.interval_seconds
+    VALIDATOR_MONITOR_IMAGE            = var.validator_monitor.image
   }
 
   node_env_file = join("\n", concat(
