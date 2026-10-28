@@ -256,6 +256,11 @@ CRON
   # Vigia de peers: a cada 5 min; reinicia o Besu se ficar sem peers em 2 verificações seguidas (ver rbb-node watchdog)
   printf '*/5 * * * * root /usr/local/bin/rbb-node watchdog >/dev/null 2>&1\n' > /etc/cron.d/rbb-watchdog
   chmod 0644 /etc/cron.d/rbb-watchdog
+  # Monitoração automática de validators (opcional; ver rbb-node validator-monitor)
+  if [[ "${NODE_TYPE}" == "validator" && "${VALIDATOR_MONITOR_ENABLED:-false}" == "true" ]]; then
+    log "instalando a monitoração automática de validators (${VALIDATOR_MONITOR_REPO:-RBBNet/monitoracao-validadores}@${VALIDATOR_MONITOR_REF:-main})"
+    /usr/local/bin/rbb-node validator-monitor install || log "monitoração de validators: falha na instalação (rode 'rbb-node validator-monitor install' depois)"
+  fi
 }
 
 # Exportador de peers/disco/memória (porta 9546, só VPC) para o Prometheus da organização.

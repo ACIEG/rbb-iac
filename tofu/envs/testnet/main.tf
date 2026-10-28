@@ -55,4 +55,5 @@ module "rbb" {
   nat_gateway           = var.nat_gateway
 
   prometheus_federation_targets = local.prometheus_federation_targets
+  validator_monitor             = var.validator_monitor
 }

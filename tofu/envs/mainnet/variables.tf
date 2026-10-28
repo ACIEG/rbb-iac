@@ -193,3 +193,21 @@ variable "prometheus_federation_targets" {
   }))
   default = []
 }
+
+variable "validator_monitor" {
+  description = <<-EOT
+    Monitoração automática de validators (RBBNet/monitoracao-validadores), instalada nos nós validator quando enabled = true.
+    A cada interval_seconds consulta qbft_getSignerMetrics dos últimos block_interval blocos no próprio validator e vota
+    (qbft_proposeValidatorVote) pela exclusão de quem não propôs nenhum bloco, como a rede espera de cada partícipe.
+    repo é owner/repo no GitHub e ref uma branch, tag ou commit (o código é baixado como tarball, sem git).
+  EOT
+  type = object({
+    enabled          = optional(bool, false)
+    repo             = optional(string, "RBBNet/monitoracao-validadores")
+    ref              = optional(string, "main")
+    block_interval   = optional(number, 2000)
+    interval_seconds = optional(number, 300)
+    image            = optional(string, "node:24-alpine")
+  })
+  default = {}
+}
