@@ -46,6 +46,13 @@ Operação (passo 4 do roteiro)
   watchdog                  reconecta peers estáticos ausentes (admin_addPeer); reinicia o Besu de forma controlada
                             acima de 93% da memória do contêiner (1x/6h) ou se ficar sem peers por 2 verificações (cron 5 min)
 
+Plugin de permissionamento on-chain (RBBNet/besu-permissioning-plugin; Besu >= 25.12)
+  plugin install            baixa o jar (PLUGIN_JAR_URL/SHA256 do node.env), troca a imagem do Besu (PLUGIN_BESU_IMAGE)
+                            via docker-compose.override.yml, mantendo chave e banco, e reinicia. Só em nó já sincronizado.
+  plugin status             versão do Besu, registro do plugin no log, Ingress configurados e contadores do plugin
+  plugin remove             remove o override (volta à imagem do .env) e reinicia. Atenção: o banco escrito pela versão
+                            nova pode não ser lido pela antiga; nesse caso é preciso ressincronizar.
+
 Monitoração automática de validators (somente validator; RBBNet/monitoracao-validadores)
   validator-monitor install   baixa o código (VALIDATOR_MONITOR_REPO@REF do node.env) e sobe o monitor apontando para o RPC local
   validator-monitor status    estado do contêiner e propostas de voto pendentes no nó (qbft_getPendingVotes)
@@ -261,6 +268,56 @@ cmd_prometheus() {
   esac
 }
 
+# Plugin de permissionamento on-chain. O Besu removeu o permissionamento nativo na 25.6; o plugin da RBB o
+# substitui lendo os mesmos BESU_PERMISSIONS_*_CONTRACT_ADDRESS/VERSION que o compose do start-network já define
+# (as variáveis *_ENABLED, sem opção correspondente na 25.12, são ignoradas). Receita da bancada da RBB
+# (RBBNet/bancada-plugin-permissionamento, T-05/T-11): override do compose com a imagem nova e o jar montado.
+PLUGIN_JAR="${SN_DIR}/plugins/besu-plugin-permissioning.jar"
+PLUGIN_OVERRIDE="${SN_DIR}/docker-compose.override.yml"
+cmd_plugin() {
+  need_besu
+  case "${1:-}" in
+    install)
+      [[ -n "${PLUGIN_JAR_URL:-}" && -n "${PLUGIN_JAR_SHA256:-}" && -n "${PLUGIN_BESU_IMAGE:-}" ]] || { echo "PLUGIN_JAR_URL, PLUGIN_JAR_SHA256 e PLUGIN_BESU_IMAGE precisam estar no /etc/rbb/node.env" >&2; exit 1; }
+      [[ -d "${VOL}/database" ]] || { echo "nó sem banco sincronizado (${VOL}/database): um nó novo com o plugin não sincroniza do gênesis (defeito conhecido do rc.1). Sincronize com a imagem padrão antes." >&2; exit 1; }
+      mkdir -p "${SN_DIR}/plugins"
+      echo "baixando ${PLUGIN_JAR_URL}"
+      curl -fsSL -o "${PLUGIN_JAR}.new" "${PLUGIN_JAR_URL}"
+      local sum; sum="$(sha256sum "${PLUGIN_JAR}.new" | cut -d' ' -f1)"
+      [[ "${sum}" == "${PLUGIN_JAR_SHA256}" ]] || { rm -f "${PLUGIN_JAR}.new"; echo "SHA-256 do jar não confere: esperado ${PLUGIN_JAR_SHA256}, obtido ${sum}" >&2; exit 1; }
+      mv -f "${PLUGIN_JAR}.new" "${PLUGIN_JAR}"; chmod 0644 "${PLUGIN_JAR}"; chown -R rbb:rbb "${SN_DIR}/plugins"
+      cat > "${PLUGIN_OVERRIDE}" <<OVERRIDE
+# Gerado por rbb-node plugin install: Besu com o plugin de permissionamento on-chain da RBB.
+# Aplicado automaticamente pelo docker compose junto com docker-compose.yml. Remova com rbb-node plugin remove.
+services:
+  ${NODE_NAME}:
+    image: ${PLUGIN_BESU_IMAGE}
+    volumes:
+      - \${PWD}/plugins/besu-plugin-permissioning.jar:/opt/besu/plugins/besu-plugin-permissioning.jar:ro
+OVERRIDE
+      chown rbb:rbb "${PLUGIN_OVERRIDE}"
+      echo "baixando a imagem ${PLUGIN_BESU_IMAGE}"
+      docker pull -q "${PLUGIN_BESU_IMAGE}" >/dev/null
+      echo "reiniciando o Besu com o plugin (chave e banco mantidos)"
+      as_rbb "./rbb-cli config render-templates >/dev/null && docker compose down && docker compose up -d"
+      echo "feito. Acompanhe com: rbb-node plugin status" ;;
+    status)
+      if [[ -f "${PLUGIN_OVERRIDE}" ]]; then echo "override: $(grep -m1 'image:' "${PLUGIN_OVERRIDE}" | sed 's/^ *//')"; else echo "override: ausente (plugin não instalado)"; fi
+      [[ -f "${PLUGIN_JAR}" ]] && echo "jar: $(sha256sum "${PLUGIN_JAR}" | cut -c1-16)… ($(stat -c %s "${PLUGIN_JAR}") bytes)"
+      echo "besu: $(rpc web3_clientVersion | jq -r '.result // .error')"
+      local logs; logs="$(as_rbb "docker compose logs --no-log-prefix 2>/dev/null" | grep -E 'Registering On-Chain Permissioning Plugin|Ingress Address set to|contract interface version|Could not resolve|Rejecting' | tail -6)"
+      [[ -n "${logs}" ]] && printf '%s\n' "${logs}" | cut -c1-200 | sed 's/^/log: /'
+      curl -s "http://127.0.0.1:${METRICS_PORT}/metrics" 2>/dev/null | grep -E '^besu(_|)permissioning' | sed 's/^/métrica: /' || true ;;
+    remove)
+      [[ -f "${PLUGIN_OVERRIDE}" ]] || { echo "plugin não instalado"; exit 0; }
+      rm -f "${PLUGIN_OVERRIDE}"
+      echo "override removido; reiniciando o Besu com a imagem padrão (${BESU_IMAGE})"
+      as_rbb "./rbb-cli config render-templates >/dev/null && docker compose down && docker compose up -d"
+      echo "se o Besu não subir por incompatibilidade do banco, reinstale o plugin (rbb-node plugin install) ou ressincronize" ;;
+    *) usage; exit 1 ;;
+  esac
+}
+
 # Monitoração automática de validators: cada partícipe roda um agente junto ao seu validator que vota
 # (qbft_proposeValidatorVote) pela exclusão de quem parou de propor blocos. Código de referência da RBB,
 # executado em contêiner Node na rede do host, apontando para o RPC local do validator (único destino válido).
@@ -331,6 +388,7 @@ case "${1:-}" in
   watchdog)  cmd_watchdog ;;
   prometheus) shift; cmd_prometheus "$@" ;;
   validator-monitor) shift; cmd_validator_monitor "$@" ;;
+  plugin)    shift; cmd_plugin "$@" ;;
   -h|--help|help|"") usage ;;
   *) usage; exit 1 ;;
 esac

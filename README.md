@@ -150,6 +150,7 @@ Em qualquer VM, como root (`sudo rbb-node`):
 | `watchdog` | a cada 5 min (cron): reenvia `admin_addPeer` para os peers de `static-nodes.json` que não estão conectados (o Besu 25.5 nem sempre volta a tentar sozinho); reinicia o Besu de forma controlada quando a memória real do contêiner passa de 93% do limite (no máximo 1x a cada 6 h, evitando a morte abrupta pelo kernel); e reinicia se o nó ficar sem nenhum peer em duas verificações seguidas |
 | `jfr-clean` | remove gravações antigas do Java Flight Recorder no `/tmp` do contêiner (o bootstrap instala um cron horário) |
 | `validator-monitor install\|status\|logs\|remove` | monitoração automática de validators (ver abaixo), só em nós validator |
+| `plugin install\|status\|remove` | plugin de permissionamento on-chain (ver abaixo): Besu 25.12 + jar do plugin, mantendo chave e banco |
 | `prometheus clients <pem>` / `prometheus federation <json>` / `prometheus reload` | nós prometheus |
 
 Do lado local, `scripts/rbb-ssh-keys.sh <env> show|set|add|remove` gerencia as chaves SSH autorizadas em todos os nós, e `scripts/rbb-update-tools.sh <env> [--rerun-setup]` envia versões novas do `rbb-node`/bootstrap para as VMs sem recriá-las (o bootstrap é idempotente e migra os dados para o volume caso ele tenha sido anexado depois do primeiro boot).
@@ -159,6 +160,21 @@ O layout na VM é o mesmo do roteiro: `/srv/rbb/start-network/` (rbb-cli, `infra
 ## Grafana
 
 O nó prometheus traz um Grafana em `https://<ip-do-prometheus>/grafana/` (mesmo certificado do NGINX; login próprio, usuário `admin`, senha inicial em `/srv/rbb/prometheus/.grafana-admin-initial`, legível só por root). A fonte de dados e os painéis são provisionados a partir deste repositório (`files/grafana-*`): há dois painéis: **RBB - consenso** (quantos validators o nosso vê, blocos propostos por validator nos últimos 100, nossa fatia e último bloco proposto; alerta `ValidatorNotProposing` quando o nosso validator para de propor) e **RBB - nós e federação**, que mostra distância da ponta, peers, reinícios, altura e memória dos nossos nós, o estado da federação por organização (porta e certificado) e os alertas ativos. Painéis criados pela interface não são versionados; para mudar o padrão, edite o JSON e reenvie com `rbb-update-tools.sh`.
+
+## Plugin de permissionamento on-chain
+
+O Besu removeu o permissionamento on-chain nativo na 25.6.0; a RBB o substitui pelo [besu-permissioning-plugin](https://github.com/RBBNet/besu-permissioning-plugin) (Besu 25.12+), que valida transações e conexões consultando os mesmos contratos gen02. A RBB pede a implantação em todos os nós ([RBBNet/rbb#221](https://github.com/RBBNet/rbb/issues/221)). A variável `permissioning_plugin` fixa a imagem do Besu (por digest), a URL do jar do release e o seu SHA-256; `enabled` liga o plugin em todos os nós, e `nodes[*].permissioning_plugin` liga ou desliga por nó, para migrar um de cada vez:
+
+```hcl
+nodes = {
+  observer01 = { type = "observer", permissioning_plugin = true }
+  ...
+}
+```
+
+A instalação (`rbb-node plugin install`, feita pelo bootstrap quando habilitada) segue a receita da [bancada de testes da RBB](https://github.com/RBBNet/bancada-plugin-permissionamento): baixa o jar e confere o hash, escreve um `docker-compose.override.yml` ao lado do compose do start-network trocando a imagem e montando o jar em `/opt/besu/plugins`, e reinicia o Besu mantendo chave e banco. As variáveis `BESU_PERMISSIONS_*_CONTRACT_ADDRESS/VERSION` que o plugin lê já vêm do compose da RBB. Em um nó já provisionado: `rbb-update-tools.sh`, variáveis `PLUGIN_*` no `/etc/rbb/node.env` e `sudo rbb-node plugin install`; `rbb-node plugin status` mostra a versão do Besu, o registro do plugin, os Ingress resolvidos e os contadores de permissões/recusas.
+
+Limites conhecidos do `v1.0.0-rc.1` (issues abertas no repositório do plugin): um nó novo com o plugin não consegue sincronizar do gênesis, e um nó em sincronização derruba peers permitidos. Por isso o plugin só é instalado em nó com banco já sincronizado, e uma VM recriada sobe com a imagem padrão até sincronizar. A volta à imagem anterior (`plugin remove`) não é garantida: o banco escrito pela versão nova pode não ser lido pela antiga.
 
 ## Monitoração automática de validators
 
