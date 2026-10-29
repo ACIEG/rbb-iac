@@ -267,7 +267,7 @@ rbb-iac/
 
 ## Custo a partir do plano
 
-`make cost ENV=testnet`: estimativa mensal com preços ao vivo da Magalu via [mgc-infra-costs](https://github.com/poperador/mgc-infra-costs).
+`make cost ENV=testnet`: estimativa mensal com preços ao vivo da Magalu via [mgc-infra-costs](https://github.com/prenansantana/mgc-infra-costs).
 
 ## Testes sem credenciais
 
