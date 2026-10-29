@@ -59,5 +59,5 @@ status:
 	./scripts/rbb-status-config.sh $(ENV) && cd tools/rbb-status && go run . report --config ../../tofu/envs/$(ENV)/network/rbb-status.json
 
 cost:
-	@command -v mgc-infra-costs >/dev/null || { echo "instale: go install github.com/poperador/mgc-infra-costs/cmd/mgc-infra-costs@latest"; exit 1; }
+	@command -v mgc-infra-costs >/dev/null || { echo "instale: go install github.com/prenansantana/mgc-infra-costs/cmd/mgc-infra-costs@latest"; exit 1; }
 	cd $(DIR) && $(TOFU) plan -input=false -refresh=false -out=/tmp/rbb-cost.tfplan >/dev/null && $(TOFU) show -json /tmp/rbb-cost.tfplan | jq 'del(.variables)' > /tmp/rbb-cost.json && rm -f /tmp/rbb-cost.tfplan && mgc-infra-costs breakdown --plan /tmp/rbb-cost.json --region br-se1
