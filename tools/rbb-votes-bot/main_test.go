@@ -174,4 +174,36 @@ func TestVoteTally(t *testing.T) {
 	if len(msgs) != 1 || !strings.Contains(msgs[0], "1 de 6") || b.state.count("drop:"+cand) != 1 {
 		t.Fatalf("voto após a entrada: %v %v", msgs, b.state.Tally)
 	}
+	// mais cinco restos: remoção 6 de 6 poucos blocos após a readmissão -> rascunho de incidente de propostas antigas
+	i := 0
+	for _, p := range b.state.Validators {
+		if p == cand || b.state.has("drop:"+cand, p) {
+			continue
+		}
+		msgs = b.applyVote(uint64(131+i), p, &HeaderVote{Candidate: cand, Add: false})
+		i++
+		if b.state.count("drop:"+cand) == 0 {
+			break
+		}
+	}
+	if len(msgs) != 3 || !strings.Contains(msgs[2], "SAIU") || len(b.state.Validators) != 9 {
+		t.Fatalf("remoção após readmissão: %v %v", msgs, b.state.Validators)
+	}
+	if !strings.Contains(b.lastIncident, "Rascunho de issue") || !strings.Contains(b.lastIncident, "após ser readmitido") || !strings.Contains(b.lastIncident, "Votos de remoção") {
+		t.Fatalf("incidente esperado de propostas antigas: %q", b.lastIncident)
+	}
+}
+
+func TestStallDetection(t *testing.T) {
+	b := &Bot{cfg: Config{Network: "T", StallAfter: time.Minute}, state: loadState("/nonexistent/state.json"), names: map[string]string{}}
+	b.checkStall(100)
+	b.state.LastHeadAt -= 120 // simula 2 min sem bloco novo
+	b.checkStall(100)
+	if !b.state.Stalled || !strings.Contains(b.lastIncident, "sem produzir blocos") {
+		t.Fatalf("rede parada não detectada: stalled=%v incidente=%q", b.state.Stalled, b.lastIncident)
+	}
+	b.checkStall(101)
+	if b.state.Stalled || b.state.LastHead != 101 {
+		t.Fatalf("recuperação não registrada: %+v", b.state)
+	}
 }

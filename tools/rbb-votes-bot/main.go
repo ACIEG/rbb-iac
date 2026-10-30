@@ -24,6 +24,8 @@ type Config struct {
 	OrgName          string // nossa organização (para avisos no canal próprio)
 	WebhookNetwork   string
 	WebhookOrg       string
+	WebhookIncidents string // rascunhos de issue (vazio = canal da organização, senão o da rede)
+	StallAfter       time.Duration
 	StateFile        string
 	Poll             time.Duration
 	BotName          string
@@ -37,6 +39,8 @@ type Bot struct {
 	rpc   *RPC
 	state *State
 	names map[string]string // endereço do validator (minúsculo) -> "ORG/validator01"
+
+	lastIncident string // último rascunho de incidente gerado (testes)
 }
 
 func env(k, def string) string {
@@ -65,6 +69,8 @@ func main() {
 	flag.StringVar(&cfg.OrgName, "org", env("ORG_NAME", ""), "nossa organização, como no nodes.json")
 	flag.StringVar(&cfg.WebhookNetwork, "webhook-network", env("DISCORD_WEBHOOK_NETWORK", ""), "webhook do canal da rede (vazio = só log)")
 	flag.StringVar(&cfg.WebhookOrg, "webhook-org", env("DISCORD_WEBHOOK_ORG", ""), "webhook do canal da organização (vazio = só log)")
+	flag.StringVar(&cfg.WebhookIncidents, "webhook-incidents", env("DISCORD_WEBHOOK_INCIDENTS", ""), "webhook para rascunhos de issue de incidentes (vazio = canal da organização, senão o da rede)")
+	stall := flag.Duration("stall-after", 3*time.Minute, "tempo sem bloco novo para considerar a rede parada")
 	flag.StringVar(&cfg.StateFile, "state", env("STATE_FILE", "/var/lib/rbb-votes-bot/state.json"), "arquivo de estado")
 	flag.StringVar(&cfg.BotName, "name", env("BOT_NAME", "RBB votações"), "nome exibido no Discord")
 	flag.StringVar(&cfg.Network, "network", env("RBB_NETWORK", "TESTNET"), "nome da rede nas mensagens")
@@ -73,7 +79,7 @@ func main() {
 	epoch := flag.Uint64("epoch", envUint("EPOCH_LENGTH", 30000), "qbft.epochlength do genesis (0 = sem época)")
 	once := flag.Bool("once", false, "executa uma varredura e sai")
 	flag.Parse()
-	cfg.Poll, cfg.DeadlineWarn, cfg.EpochLength = *poll, *warn, *epoch
+	cfg.Poll, cfg.DeadlineWarn, cfg.EpochLength, cfg.StallAfter = *poll, *warn, *epoch, *stall
 
 	b := &Bot{cfg: cfg, rpc: NewRPC(cfg.RPCURL), state: loadState(cfg.StateFile), names: loadNames(cfg.NodesJSON)}
 	log.Printf("rbb-votes-bot: rpc=%s governance=%s estado=%s (bloco %d)", cfg.RPCURL, cfg.GovernanceAddr, cfg.StateFile, b.state.LastBlock)
@@ -152,6 +158,7 @@ func (b *Bot) tick() error {
 		b.state.LastBlock = head - 1 // primeira execução: começa do presente
 		b.state.LastGovBlock = head - 1
 	}
+	b.checkStall(head)
 	if head <= b.state.LastBlock {
 		return nil
 	}
@@ -250,6 +257,11 @@ func (b *Bot) applyVote(n uint64, proposer string, v *HeaderVote) []string {
 	}
 	if tally >= maj {
 		// maioria: o Besu aplica a mudança já neste bloco e descarta os votos sobre o candidato
+		if v.Add {
+			b.state.Joined[v.Candidate] = n
+		} else {
+			b.removalIncident(v.Candidate, append([]string{}, b.state.Tally[key]...), n)
+		}
 		b.state.discardFor(v.Candidate, !v.Add)
 		b.state.setValidator(v.Candidate, v.Add)
 		msgs = append(msgs, fmt.Sprintf("🔔 %s: maioria atingida para %s **%s**; a mudança no consenso vale a partir do próximo bloco.", b.cfg.Network, strings.ToLower(verb), b.name(v.Candidate)))
@@ -416,7 +428,7 @@ func (b *Bot) checkGovernance(head uint64) error {
 				b.cfg.Network, key, ps.Description, humanDur(left), ps.Approve, ps.Reject, b.pendingOrgs(key))
 			b.postNetwork(msg)
 			if b.cfg.OrgName != "" && strings.Contains(b.pendingOrgs(key), b.cfg.OrgName) {
-				b.postOrg(fmt.Sprintf("⏳ %s: a ACIEG ainda não votou na proposta %s (%s); vence em ~%s. Use governance.js castVote com a conta de Administrador Global.", b.cfg.Network, key, ps.Description, humanDur(left)))
+				b.postOrg(fmt.Sprintf("⏳ %s: a %s ainda não votou na proposta %s (%s); vence em ~%s. Use governance.js castVote com a conta de Administrador Global.", b.cfg.Network, b.cfg.OrgName, key, ps.Description, humanDur(left)))
 			}
 		}
 	}
@@ -452,7 +464,7 @@ func (b *Bot) onProposalCreated(id, head uint64) {
 	b.postNetwork(fmt.Sprintf("📜 %s: nova proposta de governança **%d** — \"%s\", proposta por **%s**. Vence no bloco %d (~%s). Precisa da maioria de %d organizações votantes.",
 		b.cfg.Network, id, ps.Description, b.orgName(p.ProponentOrg), ps.Deadline, humanDur(left), len(p.Organizations)))
 	if b.cfg.OrgName != "" {
-		b.postOrg(fmt.Sprintf("📜 %s: proposta **%d** criada (\"%s\"); a ACIEG precisa votar até ~%s: `node governance.js getProposal %d` e `castVote %d true|false`.", b.cfg.Network, id, ps.Description, humanDur(left), id, id))
+		b.postOrg(fmt.Sprintf("📜 %s: proposta **%d** criada (\"%s\"); a %s precisa votar até ~%s: `node governance.js getProposal %d` e `castVote %d true|false`.", b.cfg.Network, id, ps.Description, b.cfg.OrgName, humanDur(left), id, id))
 	}
 }
 

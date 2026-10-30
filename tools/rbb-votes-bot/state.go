@@ -12,7 +12,11 @@ type State struct {
 	Validators     []string            `json:"validators"`     // conjunto QBFT conhecido
 	Tally          map[string][]string `json:"tally"`          // "add:0x..."/"drop:0x..." -> validators que votaram nesta época
 	PrevEpochTally map[string][]string `json:"prevEpochTally"` // placar descartado na última troca de época
-	Proposals      map[string]*PState  `json:"proposals"`      // id -> estado conhecido
+	Joined         map[string]uint64   `json:"joined"`         // validator -> bloco em que (re)entrou no consenso
+	LastHead       uint64              `json:"lastHead"`       // última cabeça vista e quando mudou (detecção de rede parada)
+	LastHeadAt     int64               `json:"lastHeadAt"`
+	Stalled        bool                `json:"stalled"`
+	Proposals      map[string]*PState  `json:"proposals"` // id -> estado conhecido
 	OrgNames       map[uint64]string   `json:"orgNames"`
 	LastGovBlock   uint64              `json:"lastGovBlock"`
 }
@@ -34,6 +38,9 @@ func loadState(path string) *State {
 	}
 	if s.Tally == nil {
 		s.Tally = map[string][]string{}
+	}
+	if s.Joined == nil {
+		s.Joined = map[string]uint64{}
 	}
 	if s.Proposals == nil {
 		s.Proposals = map[string]*PState{}

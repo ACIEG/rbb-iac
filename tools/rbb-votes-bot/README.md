@@ -5,6 +5,7 @@ Acompanha as votações da RBB e avisa num canal do Discord. Só leitura, só fa
 - **Votações QBFT** (entrada/saída de validators do consenso): lidas nos cabeçalhos dos blocos. Avisa quando um validator vota ou muda o voto, com o placar (`N de M necessários`), quando a maioria é atingida, quando o conjunto de validators muda e quando a época (`qbft.epochlength`, padrão 30000 blocos, `EPOCH_LENGTH`) zera o placar. O bot espelha o `VoteTally` do Besu: cada validator emite o voto uma única vez por época (no primeiro bloco que propõe depois de registrá-lo), e um bloco sem voto não significa desistência. A reemissão do mesmo voto depois da época é contada em silêncio (só no log). Uma retirada (`qbft_discardValidatorVote`) não aparece na rede; só se nota porque o voto não é reemitido na época seguinte.
 - **Propostas de governança gen02** (contrato `Governance`): nova proposta (com prazo estimado), voto de cada organização (com placar), aprovação/rejeição/execução, e **aviso de prazo** listando quem ainda não votou.
 - Dois canais: o da rede (tudo acima, factual) e o da organização (só o que diz respeito a nós: votos no nosso validator, entrada/saída do consenso, proposta pendente do nosso voto).
+- **Incidentes**: para eventos graves, além do aviso, o bot manda um **rascunho de issue** pronto para colar no repositório da RBB, com blocos, horários e envolvidos (canal `DISCORD_WEBHOOK_INCIDENTS`; se vazio, o da organização; se vazio, o da rede). Nada é aberto no GitHub automaticamente. Eventos: validator removido do consenso (com quem votou); validator removido até 2000 blocos depois de ser readmitido (padrão de propostas de remoção antigas reemitidas pelo Besu); rede sem blocos novos por mais de `-stall-after` (padrão 3 min), e a recuperação.
 
 ## Uso
 
@@ -46,6 +47,9 @@ Um único bot por rede basta: o serviço é portátil e pode ser hospedado por q
 
 ```
 🗳️ TESTNET: TCU vota ADICIONAR o validator BNDES/validator02 — 3 de 5 necessários. Bloco 22521300.
+🧾 Rascunho de issue (TESTNET), para colar em RBBNet/rbb se couber:
+    Título: Validator X/validator01 removido 18 blocos após ser readmitido na TESTNET
+    ... votos de remoção, casas envolvidas e ação sugerida ...
 🔄 TESTNET: nova época no bloco 22530000, a contagem de votos QBFT foi zerada. Votos descartados: remover BNDES/validator02 (PRODEMGE). Quem mantiver a proposta no nó reemite o voto automaticamente.
 ✅ TESTNET: validator BNDES/validator02 ENTROU no consenso. Agora são 9 validators. Bloco 22521352.
 📜 TESTNET: nova proposta de governança 8 — "Permissionamento da XYZ", proposta por BNDES. Vence no bloco 22600000 (~2 dias). Precisa da maioria de 9 organizações votantes.
