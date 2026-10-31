@@ -40,7 +40,8 @@ type Bot struct {
 	state *State
 	names map[string]string // endereço do validator (minúsculo) -> "ORG/validator01"
 
-	lastIncident string // último rascunho de incidente gerado (testes)
+	pendingIncidents [][2]string // rascunhos de incidente a publicar depois das mensagens do bloco
+	lastIncident     string      // último rascunho publicado (testes)
 }
 
 func env(k, def string) string {
@@ -205,6 +206,7 @@ func (b *Bot) processBlock(n uint64) error {
 	for _, msg := range msgs {
 		b.postNetwork(msg)
 	}
+	b.flushIncidents()
 	if len(msgs) > 0 && b.cfg.OrgName != "" && strings.EqualFold(b.orgOf(v.Candidate), b.cfg.OrgName) {
 		verb := "adicionar"
 		if !v.Add {

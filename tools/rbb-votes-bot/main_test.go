@@ -189,6 +189,10 @@ func TestVoteTally(t *testing.T) {
 	if len(msgs) != 3 || !strings.Contains(msgs[2], "SAIU") || len(b.state.Validators) != 9 {
 		t.Fatalf("remoção após readmissão: %v %v", msgs, b.state.Validators)
 	}
+	if b.lastIncident != "" || len(b.pendingIncidents) != 1 {
+		t.Fatalf("o rascunho deve esperar as mensagens do bloco: publicado=%q pendentes=%d", b.lastIncident, len(b.pendingIncidents))
+	}
+	b.flushIncidents()
 	if !strings.Contains(b.lastIncident, "Rascunho de issue") || !strings.Contains(b.lastIncident, "após ser readmitido") || !strings.Contains(b.lastIncident, "Votos de remoção") {
 		t.Fatalf("incidente esperado de propostas antigas: %q", b.lastIncident)
 	}

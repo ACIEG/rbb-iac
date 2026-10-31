@@ -17,7 +17,20 @@ import (
 // blocos após a (re)admissão em que uma remoção é tratada como efeito de propostas antigas
 const readmitWindow = 2000
 
-func (b *Bot) incident(title, body string) string {
+// incident enfileira o rascunho; ele é publicado depois das mensagens normais do bloco (ordem de leitura:
+// voto que fechou a maioria, mudança no consenso e, por último, o rascunho). Ver flushIncidents.
+func (b *Bot) incident(title, body string) {
+	b.pendingIncidents = append(b.pendingIncidents, [2]string{title, body})
+}
+
+func (b *Bot) flushIncidents() {
+	for _, in := range b.pendingIncidents {
+		b.postIncident(in[0], in[1])
+	}
+	b.pendingIncidents = nil
+}
+
+func (b *Bot) postIncident(title, body string) string {
 	body = strings.TrimSpace(body)
 	content := fmt.Sprintf("🧾 **Rascunho de issue** (%s), para colar em RBBNet/rbb se couber:\n```\nTítulo: %s\n\n%s\n```", b.cfg.Network, title, body)
 	if len(content) > 1900 {
@@ -83,5 +96,6 @@ func (b *Bot) checkStall(head uint64) {
 			fmt.Sprintf("A cabeça da cadeia está parada no bloco %d desde %s (~%s), observado pelo nó %s.\n"+
 				"Validators no consenso: %d (%s). O QBFT precisa de mais de 2/3 dos validators conectados entre si para fechar blocos; verificar quais estão fora do ar ou isolados.",
 				head, time.Unix(b.state.LastHeadAt, 0).UTC().Format("2006-01-02 15:04 UTC"), humanDur(stopped), b.cfg.RPCURL, len(b.state.Validators), b.orgList(b.state.Validators)))
+		b.flushIncidents()
 	}
 }
