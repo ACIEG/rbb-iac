@@ -264,6 +264,7 @@ func (b *Bot) applyVote(n uint64, proposer string, v *HeaderVote) []string {
 		}
 		b.state.discardFor(v.Candidate, !v.Add)
 		b.state.setValidator(v.Candidate, v.Add)
+		b.state.LastSetChange = n
 		msgs = append(msgs, fmt.Sprintf("🔔 %s: maioria atingida para %s **%s**; a mudança no consenso vale a partir do próximo bloco.", b.cfg.Network, strings.ToLower(verb), b.name(v.Candidate)))
 		msgs = append(msgs, b.setChangeMessages(v.Candidate, v.Add, n)...)
 	}
@@ -331,6 +332,12 @@ func (b *Bot) majority() int { return len(b.state.Validators)/2 + 1 }
 // Reconciliação do conjunto de validators com o nó. As mudanças normais são vistas bloco a bloco em
 // applyVote (maioria); aqui só entra o que escapou (lacuna de blocos, primeira execução), sem mexer no placar.
 func (b *Bot) checkValidators(head uint64) error {
+	// qbft_getValidatorsByBlockNumber(head) devolve o conjunto que validou o bloco head, ou seja, sem a
+	// mudança decidida no próprio head (ela vale a partir do seguinte). Se acabamos de aplicar uma
+	// mudança nesse bloco, o nó ainda responde o conjunto antigo: não há o que reconciliar.
+	if b.state.LastSetChange != 0 && head <= b.state.LastSetChange {
+		return nil
+	}
 	vals, err := b.rpc.Validators(head)
 	if err != nil {
 		return err

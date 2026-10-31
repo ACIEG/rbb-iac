@@ -207,3 +207,22 @@ func TestStallDetection(t *testing.T) {
 		t.Fatalf("recuperação não registrada: %+v", b.state)
 	}
 }
+
+// Reconciliação no bloco da maioria: o nó ainda responde o conjunto antigo para esse bloco; não pode gerar ENTROU/SAIU falsos
+func TestNoReconcileAtChangeBlock(t *testing.T) {
+	b := &Bot{cfg: Config{Network: "T"}, state: loadState("/nonexistent/state.json"), names: map[string]string{}}
+	for i := 1; i <= 10; i++ {
+		b.state.Validators = append(b.state.Validators, fmt.Sprintf("0x%040x", i))
+	}
+	cand := b.state.Validators[9]
+	for i := 0; i < 6; i++ {
+		b.applyVote(uint64(500+i), b.state.Validators[i], &HeaderVote{Candidate: cand, Add: false})
+	}
+	if len(b.state.Validators) != 9 || b.state.LastSetChange != 505 {
+		t.Fatalf("remoção não aplicada: %d validators, mudança em %d", len(b.state.Validators), b.state.LastSetChange)
+	}
+	// head == bloco da mudança: nada a fazer, mesmo sem RPC (rpc nil provocaria pânico se fosse chamado)
+	if err := b.checkValidators(505); err != nil {
+		t.Fatalf("reconciliação no bloco da mudança: %v", err)
+	}
+}

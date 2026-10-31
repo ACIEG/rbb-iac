@@ -13,6 +13,7 @@ type State struct {
 	Tally          map[string][]string `json:"tally"`          // "add:0x..."/"drop:0x..." -> validators que votaram nesta época
 	PrevEpochTally map[string][]string `json:"prevEpochTally"` // placar descartado na última troca de época
 	Joined         map[string]uint64   `json:"joined"`         // validator -> bloco em que (re)entrou no consenso
+	LastSetChange  uint64              `json:"lastSetChange"`  // bloco da última mudança de conjunto aplicada por maioria
 	LastHead       uint64              `json:"lastHead"`       // última cabeça vista e quando mudou (detecção de rede parada)
 	LastHeadAt     int64               `json:"lastHeadAt"`
 	Stalled        bool                `json:"stalled"`
