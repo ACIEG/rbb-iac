@@ -217,3 +217,10 @@ variable "prometheus_federation_targets" {
   }))
   default = []
 }
+
+variable "votes_bot" {
+  description = "Bot de votações no nó prometheus (ver rbb-node-config). Desligado por padrão."
+  type        = any
+  default     = {}
+  sensitive   = true
+}

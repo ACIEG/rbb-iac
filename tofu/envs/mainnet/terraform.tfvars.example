@@ -30,3 +30,6 @@ admin_ssh_cidrs = ["203.0.113.0/24"]
 
 # Prometheus de outras organizações a federar
 # prometheus_federation_targets = [{ organization = "bndes", target = "203.0.113.10:443" }]
+
+# Bot de votações da RBB no nó prometheus (opcional; padrão desligado). Webhooks fora do git.
+# votes_bot = { enabled = true, webhook_org = "https://discord.com/api/webhooks/...", source_ref = "main" }

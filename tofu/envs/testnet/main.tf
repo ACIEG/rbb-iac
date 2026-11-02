@@ -5,6 +5,7 @@ locals {
   genesis_json         = local.abspath.genesis != null && fileexists(local.abspath.genesis) ? file(local.abspath.genesis) : null
   compose_template     = local.abspath.compose != null && fileexists(local.abspath.compose) ? file(local.abspath.compose) : null
   federation_from_file = local.abspath.federation != null && fileexists(local.abspath.federation) ? jsondecode(file(local.abspath.federation)) : []
+  contracts            = try(jsondecode(file("${path.module}/network/contracts.json")), {})
   participants         = var.firewall_from_participants && local.abspath.participants != null && fileexists(local.abspath.participants) ? jsondecode(file(local.abspath.participants)) : null
   # Listas vazias (ex.: rede sem validators de outras orgs) caem no fallback participant_cidrs
   peer_cidrs = local.participants == null ? {} : {
@@ -45,8 +46,13 @@ module "rbb" {
   admin_ssh_cidrs   = var.admin_ssh_cidrs
   participant_cidrs = var.participant_cidrs
   peer_cidrs        = local.peer_cidrs
-  rpc_cidrs         = var.rpc_cidrs
-  dns_domain        = var.dns_domain
+  # Bot de votações (opcional): RPC do boot pela VPC e contratos do network/contracts.json, salvo se informados
+  votes_bot = merge(var.votes_bot, {
+    governance_address   = try(coalesce(try(var.votes_bot.governance_address, null), local.contracts.Governance), "")
+    organization_address = try(coalesce(try(var.votes_bot.organization_address, null), local.contracts.OrganizationImpl), "")
+  })
+  rpc_cidrs  = var.rpc_cidrs
+  dns_domain = var.dns_domain
 
   genesis_json          = local.genesis_json
   compose_template      = local.compose_template
