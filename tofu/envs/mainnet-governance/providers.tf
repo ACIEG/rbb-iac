@@ -5,7 +5,7 @@ provider "aws" {
   default_tags {
     tags = {
       "rbb:organization" = var.organization
-      "rbb:network"      = "lab"
+      "rbb:network"      = "piloto"
       "managed-by"       = "opentofu"
     }
   }

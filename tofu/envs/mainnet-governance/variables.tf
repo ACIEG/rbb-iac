@@ -1,4 +1,4 @@
-# Cofre de chaves de governança da organização na rede lab (testnet) da RBB.
+# Cofre de chaves de governança da organização na rede piloto (mainnet) da RBB.
 # Estado separado da infra dos nós (Magalu): conta e provedor diferentes.
 
 variable "aws_account_id" {
