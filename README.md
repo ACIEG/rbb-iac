@@ -175,7 +175,7 @@ Recomendação: subir um `observer01` archive na testnet para medir disco e temp
 
 ## Chaves de governança (Administrador Global) em cofre de chaves
 
-A conta de Administrador Global da organização no permissionamento da RBB representa a instituição em votações on chain e deve ficar sob custódia dela, sem chave privada exportável. O diretório `tofu/envs/testnet-governance` (e, futuramente, `mainnet-governance`) cria isso numa conta AWS da própria organização, separada da infra dos nós:
+A conta de Administrador Global da organização no permissionamento da RBB representa a instituição em votações on chain e deve ficar sob custódia dela, sem chave privada exportável. Os diretórios `tofu/envs/testnet-governance` e `tofu/envs/mainnet-governance` criam isso, uma chave por rede, numa conta AWS da própria organização, separada da infra dos nós:
 
 - chave **secp256k1 no AWS KMS**, uso apenas de assinatura, não exportável, com `prevent_destroy`;
 - **papel de assinatura** com apenas `kms:Sign`, assumível só pelos usuários IAM listados em `signer_iam_users` (revogar = remover da lista e aplicar);
@@ -262,6 +262,7 @@ rbb-iac/
     └── envs/
         ├── testnet/              # rede lab (nós na Magalu)
         ├── testnet-governance/   # chave de governança da rede lab (AWS KMS)
+        ├── mainnet-governance/   # chave de governança da rede piloto (AWS KMS)
         └── mainnet/              # rede piloto
 ```
 
