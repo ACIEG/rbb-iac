@@ -196,6 +196,11 @@ locals {
     VALIDATOR_MONITOR_BLOCK_INTERVAL   = var.validator_monitor.block_interval
     VALIDATOR_MONITOR_INTERVAL_SECONDS = var.validator_monitor.interval_seconds
     VALIDATOR_MONITOR_IMAGE            = var.validator_monitor.image
+    # Plugin de permissionamento (ver rbb-node plugin)
+    PLUGIN_ENABLED    = var.permissioning_plugin.enabled
+    PLUGIN_BESU_IMAGE = var.permissioning_plugin.besu_image
+    PLUGIN_JAR_URL    = var.permissioning_plugin.jar_url
+    PLUGIN_JAR_SHA256 = var.permissioning_plugin.jar_sha256
   }
 
   node_env_file = join("\n", concat(

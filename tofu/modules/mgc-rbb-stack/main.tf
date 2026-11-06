@@ -72,6 +72,7 @@ module "node_config" {
   jvm_heap              = each.value.jvm_heap
   data_volume           = contains(keys(local.volume_nodes), each.key)
   validator_monitor     = var.validator_monitor
+  permissioning_plugin  = merge(var.permissioning_plugin, { enabled = coalesce(each.value.permissioning_plugin, var.permissioning_plugin.enabled) })
 
   prometheus_targets            = each.value.type == "prometheus" ? local.prometheus_targets : []
   prometheus_federation_targets = each.value.type == "prometheus" ? var.prometheus_federation_targets : []

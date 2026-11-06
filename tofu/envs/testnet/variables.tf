@@ -135,6 +135,8 @@ variable "nodes" {
     container_memory  = optional(string)
     jvm_heap          = optional(string)
     private_ip_offset = optional(number)
+    # Liga/desliga o plugin de permissionamento neste nó (nulo = permissioning_plugin.enabled)
+    permissioning_plugin = optional(bool)
   }))
   default = {
     boot01          = { type = "boot" }
@@ -208,6 +210,23 @@ variable "validator_monitor" {
     block_interval   = optional(number, 2000)
     interval_seconds = optional(number, 300)
     image            = optional(string, "node:24-alpine")
+  })
+  default = {}
+}
+
+variable "permissioning_plugin" {
+  description = <<-EOT
+    Plugin de permissionamento on-chain da RBB (RBBNet/besu-permissioning-plugin), que substitui o permissionamento
+    nativo removido do Besu a partir da 25.6. Versões fixadas: imagem do Besu compatível, URL do jar do release e seu SHA-256.
+    enabled liga o plugin nos nós (pode ser sobreposto por nó em nodes[*].permissioning_plugin). A instalação troca a
+    imagem do Besu e monta o jar via docker-compose.override.yml, mantendo chave e banco (rbb-node plugin install).
+    Só para nós já sincronizados: um nó novo sobe com a imagem padrão e recebe o plugin depois de sincronizar.
+  EOT
+  type = object({
+    enabled    = optional(bool, false)
+    besu_image = optional(string, "hyperledger/besu:25.12.0@sha256:4ef9e934bb321d916ff245981fd65100dc41446b26b2bed47a2b7d09139a3cbe")
+    jar_url    = optional(string, "https://github.com/RBBNet/besu-permissioning-plugin/releases/download/v1.0.0-rc.2/besu-plugin-permissioning.jar")
+    jar_sha256 = optional(string, "adcf767aa6583877b123a6f726757123d50200b202ab83ea403591e10ea9deed")
   })
   default = {}
 }

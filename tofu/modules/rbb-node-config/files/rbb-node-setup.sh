@@ -256,6 +256,16 @@ CRON
   # Vigia de peers: a cada 5 min; reinicia o Besu se ficar sem peers em 2 verificações seguidas (ver rbb-node watchdog)
   printf '*/5 * * * * root /usr/local/bin/rbb-node watchdog >/dev/null 2>&1\n' > /etc/cron.d/rbb-watchdog
   chmod 0644 /etc/cron.d/rbb-watchdog
+  # Plugin de permissionamento (opcional; ver rbb-node plugin). Só em nó com banco já sincronizado:
+  # um nó novo com o plugin não sincroniza do gênesis, então o bootstrap de uma VM nova sobe com a imagem padrão.
+  if [[ "${PLUGIN_ENABLED:-false}" == "true" ]]; then
+    if [[ -d "${SN_DIR}/volumes/${NODE_NAME}/database" && ! -f "${SN_DIR}/docker-compose.override.yml" ]]; then
+      log "instalando o plugin de permissionamento (${PLUGIN_BESU_IMAGE})"
+      /usr/local/bin/rbb-node plugin install || log "plugin: falha na instalação (rode 'rbb-node plugin install' depois)"
+    elif [[ ! -d "${SN_DIR}/volumes/${NODE_NAME}/database" ]]; then
+      log "plugin habilitado, mas o nó ainda não tem banco: sincronize com a imagem padrão e rode 'rbb-node plugin install'"
+    fi
+  fi
   # Monitoração automática de validators (opcional; ver rbb-node validator-monitor)
   if [[ "${NODE_TYPE}" == "validator" && "${VALIDATOR_MONITOR_ENABLED:-false}" == "true" ]]; then
     log "instalando a monitoração automática de validators (${VALIDATOR_MONITOR_REPO:-RBBNet/monitoracao-validadores}@${VALIDATOR_MONITOR_REF:-main})"

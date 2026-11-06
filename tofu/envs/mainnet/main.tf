@@ -56,4 +56,5 @@ module "rbb" {
 
   prometheus_federation_targets = local.prometheus_federation_targets
   validator_monitor             = var.validator_monitor
+  permissioning_plugin          = var.permissioning_plugin
 }
