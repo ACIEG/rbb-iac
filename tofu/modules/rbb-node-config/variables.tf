@@ -247,8 +247,8 @@ variable "permissioning_plugin" {
   type = object({
     enabled    = optional(bool, false)
     besu_image = optional(string, "hyperledger/besu:25.12.0@sha256:4ef9e934bb321d916ff245981fd65100dc41446b26b2bed47a2b7d09139a3cbe")
-    jar_url    = optional(string, "https://github.com/RBBNet/besu-permissioning-plugin/releases/download/v1.0.0-rc.1/besu-plugin-permissioning.jar")
-    jar_sha256 = optional(string, "5d7eebac3de229fd5940fe919a9535c8aeab2be5108dc1bd2231a07ba33955bd")
+    jar_url    = optional(string, "https://github.com/RBBNet/besu-permissioning-plugin/releases/download/v1.0.0-rc.2/besu-plugin-permissioning.jar")
+    jar_sha256 = optional(string, "adcf767aa6583877b123a6f726757123d50200b202ab83ea403591e10ea9deed")
   })
   default = {}
 }
