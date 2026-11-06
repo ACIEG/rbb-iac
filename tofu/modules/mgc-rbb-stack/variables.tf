@@ -244,7 +244,7 @@ variable "permissioning_plugin" {
     nativo removido do Besu a partir da 25.6. Versões fixadas: imagem do Besu compatível, URL do jar do release e seu SHA-256.
     enabled liga o plugin nos nós (pode ser sobreposto por nó em nodes[*].permissioning_plugin). A instalação troca a
     imagem do Besu e monta o jar via docker-compose.override.yml, mantendo chave e banco (rbb-node plugin install).
-    Só para nós já sincronizados: um nó novo com o plugin não consegue sincronizar do gênesis (defeito conhecido do rc.1).
+    Só para nós já sincronizados: um nó novo sobe com a imagem padrão e recebe o plugin depois de sincronizar.
   EOT
   type = object({
     enabled    = optional(bool, false)

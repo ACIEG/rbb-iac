@@ -279,7 +279,7 @@ cmd_plugin() {
   case "${1:-}" in
     install)
       [[ -n "${PLUGIN_JAR_URL:-}" && -n "${PLUGIN_JAR_SHA256:-}" && -n "${PLUGIN_BESU_IMAGE:-}" ]] || { echo "PLUGIN_JAR_URL, PLUGIN_JAR_SHA256 e PLUGIN_BESU_IMAGE precisam estar no /etc/rbb/node.env" >&2; exit 1; }
-      [[ -d "${VOL}/database" ]] || { echo "nó sem banco sincronizado (${VOL}/database): um nó novo com o plugin não sincroniza do gênesis (defeito conhecido do rc.1). Sincronize com a imagem padrão antes." >&2; exit 1; }
+      [[ -d "${VOL}/database" ]] || { echo "nó sem banco sincronizado (${VOL}/database): o plugin só é instalado em nó já sincronizado. Sincronize com a imagem padrão antes." >&2; exit 1; }
       mkdir -p "${SN_DIR}/plugins"
       echo "baixando ${PLUGIN_JAR_URL}"
       curl -fsSL -o "${PLUGIN_JAR}.new" "${PLUGIN_JAR_URL}"
