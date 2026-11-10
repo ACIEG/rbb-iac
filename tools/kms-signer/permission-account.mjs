@@ -21,7 +21,7 @@ const ROLES = {
 const ABI = [
   "function addLocalAccount(address account, bytes32 roleId, bytes32 dataHash) external",
   "function updateLocalAccount(address account, bytes32 roleId, bytes32 dataHash) external",
-  "function getAccount(address account) view returns (tuple(address account, uint256 orgId, bytes32 roleId, bytes32 dataHash, bool active))",
+  "function getAccount(address account) view returns (tuple(uint256 orgId, address account, bytes32 roleId, bytes32 dataHash, bool active))",
 ];
 
 const [alias, contractsPath, account, roleName = "DEPLOYER_ROLE", dataHash = ZeroHash] = process.argv.slice(2);
