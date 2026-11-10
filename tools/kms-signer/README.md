@@ -17,3 +17,11 @@ import { JsonRpcProvider } from "ethers";
 import { KmsSigner } from "./kms-signer.mjs";
 const signer = new KmsSigner("alias/exemplo-rbb-lab-admin").connect(new JsonRpcProvider(process.env.JSON_RPC_URL));
 ```
+
+## Permissionar uma conta da organização
+
+`permission-account.mjs` cadastra (ou atualiza) uma conta no `AccountRulesV2` assinando com a chave do KMS, sem chave privada em arquivo. Padrão: `DEPLOYER_ROLE`, para contas que implantam contratos.
+
+```bash
+JSON_RPC_URL=http://127.0.0.1:8545 node permission-account.mjs alias/exemplo-rbb-lab-admin ../../tofu/envs/testnet/network/contracts.json 0x<endereço> [DEPLOYER_ROLE|USER_ROLE] [dataHash]
+```

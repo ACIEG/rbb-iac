@@ -191,6 +191,28 @@ cd ../../../tools/kms-signer && npm install && node cli.mjs address alias/<org>-
 
 `tools/kms-signer` traz um `Signer` do ethers v6 que assina com o KMS, para uso nos scripts de permissionamento no lugar de uma chave privada em variável de ambiente.
 
+## Implantar contratos (contas de aplicação)
+
+Só uma conta permissionada pela organização transaciona na RBB, e para criar contratos ela precisa do papel `DEPLOYER_ROLE` (`USER_ROLE` só chama contratos existentes). O desenvolvimento é local (Hardhat, Foundry); a RBB entra na hora de publicar. Três passos:
+
+1. **Conta de implantação.** Quem vai implantar gera a própria carteira e guarda a chave; a organização só precisa do endereço público. Para contratos que a organização vai manter, use uma chave no KMS (mesmo módulo da chave de governança) e o `kms-signer`.
+2. **Permissionar a conta**, com a chave de Administrador Global no KMS (uma vez, pelo operador da organização):
+
+   ```bash
+   ./scripts/rbb-rpc-tunnel.sh testnet &         # RPC do writer01 em http://127.0.0.1:8545
+   cd tools/kms-signer && npm ci
+   AWS_REGION=sa-east-1 node permission-account.mjs alias/<org>-rbb-lab-admin \
+     ../../tofu/envs/testnet/network/contracts.json 0x<endereço> DEPLOYER_ROLE
+   ```
+
+3. **Publicar**, com a ferramenta de preferência, pelo túnel. Exemplo de rede no `hardhat.config`:
+
+   ```js
+   networks: { rbbLab: { url: "http://127.0.0.1:8545", chainId: 648629, gasPrice: 0, accounts: [process.env.DEPLOYER_PRIVATE_KEY] } }
+   ```
+
+   O piloto usa `chainId` 12120014 e `tofu/envs/mainnet`. O RPC do writer nunca é exposto à internet; o túnel (`rbb-rpc-tunnel.sh <env> [nó] [porta]`) passa pelo bastion com a chave SSH do operador.
+
 ## Cotas iniciais da Magalu Cloud
 
 Uma conta nova vem com cotas baixas: **3 IPs públicos** e cerca de **1 TB de Block Storage** por região (a API não expõe os números; eles aparecem como `creating_error_quota` e `Insufficient quota ... public_ip`). Peça aumento no console antes da mainnet. Enquanto isso, a topologia cabe na cota com IP público só onde a RBB exige (boot, validator, observer-boot) e os demais nós privados atrás do NAT gateway, acessados por salto SSH pelo primeiro nó público (`output bastion_ip`; os scripts usam `-J` automaticamente):
