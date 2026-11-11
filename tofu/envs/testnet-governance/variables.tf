@@ -45,3 +45,13 @@ variable "application_keys" {
   type        = list(string)
   default     = []
 }
+
+variable "application_service_users" {
+  description = <<-EOT
+    Contas de serviço (usuários IAM sem console) para operar as contas de aplicação: só podem assumir o papel de
+    assinatura das chaves em application_keys. Ex.: ["tracetus-rbb-operator"]. As chaves de acesso são criadas
+    fora do estado (aws iam create-access-key) e entregues ao operador.
+  EOT
+  type        = list(string)
+  default     = []
+}
