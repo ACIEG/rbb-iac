@@ -35,3 +35,13 @@ variable "audit_retention_years" {
   type    = number
   default = 5
 }
+
+variable "application_keys" {
+  description = <<-EOT
+    Contas de aplicação da organização (implantação e operação de contratos), também no KMS: uma chave por nome,
+    ex.: ["deployer"] cria <org>-rbb-lab-deployer, com papel de assinatura próprio para os mesmos signer_iam_users.
+    Cadastre o endereço de cada uma como DEPLOYER_ROLE ou USER_ROLE com tools/kms-signer/permission-account.mjs.
+  EOT
+  type        = list(string)
+  default     = []
+}

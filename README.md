@@ -195,7 +195,7 @@ cd ../../../tools/kms-signer && npm install && node cli.mjs address alias/<org>-
 
 Só uma conta permissionada pela organização transaciona na RBB, e para criar contratos ela precisa do papel `DEPLOYER_ROLE` (`USER_ROLE` só chama contratos existentes). O desenvolvimento é local (Hardhat, Foundry); a RBB entra na hora de publicar. Três passos:
 
-1. **Conta de implantação.** Quem vai implantar gera a própria carteira e guarda a chave; a organização só precisa do endereço público. Para contratos que a organização vai manter, use uma chave no KMS (mesmo módulo da chave de governança) e o `kms-signer`.
+1. **Conta de implantação.** Para contratos da organização, crie-a no KMS junto da chave de governança: `application_keys = ["deployer"]` em `envs/<rede>-governance` cria `<org>-rbb-lab-deployer` com papel de assinatura próprio; `tools/kms-signer` dá o endereço (`npm run address -- <alias>`), assina o cadastro (`permission-account.mjs`) e a implantação (`deploy-contract.mjs`, com `examples/Oracle.sol` para testar o ciclo). Uma carteira de software só para desenvolvimento local.
 2. **Permissionar a conta**, com a chave de Administrador Global no KMS (uma vez, pelo operador da organização):
 
    ```bash
