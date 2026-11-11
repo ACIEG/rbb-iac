@@ -17,3 +17,8 @@ output "audit_bucket" {
 output "next_step" {
   value = "Endereço Ethereum: (cd tools/kms-signer && npm ci && npm run address -- ${module.admin_key.alias})"
 }
+
+output "application_keys" {
+  description = "Contas de aplicação: alias do KMS e papel de assinatura de cada uma."
+  value       = { for k, m in module.application_key : k => { alias = m.alias, signer_role_arn = m.signer_role_arn } }
+}

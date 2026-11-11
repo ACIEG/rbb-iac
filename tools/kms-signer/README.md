@@ -25,3 +25,12 @@ const signer = new KmsSigner("alias/exemplo-rbb-lab-admin").connect(new JsonRpcP
 ```bash
 JSON_RPC_URL=http://127.0.0.1:8545 node permission-account.mjs alias/exemplo-rbb-lab-admin ../../tofu/envs/testnet/network/contracts.json 0x<endereço> [DEPLOYER_ROLE|USER_ROLE] [dataHash]
 ```
+## Implantar um contrato com a chave no KMS
+
+`deploy-contract.mjs` implanta um artefato compilado (abi + bytecode, formato do Hardhat ou do solc) assinando com uma chave do KMS, que deve estar cadastrada como `DEPLOYER_ROLE`. `examples/Oracle.sol` (e o artefato `Oracle.json`, solc 0.8.28, evmVersion london) é um oráculo mínimo para exercitar o ciclo.
+
+```bash
+JSON_RPC_URL=http://127.0.0.1:8545 node deploy-contract.mjs alias/exemplo-rbb-lab-deployer examples/Oracle.json
+```
+
+Para operar o contrato depois, use `KmsSigner` como signer do ethers (`new Contract(endereco, abi, signer)`). Compile com `evmVersion` compatível com a rede (a RBB lab está em `london`; `shanghai` gera `PUSH0`, que o Besu da rede pode não aceitar).
