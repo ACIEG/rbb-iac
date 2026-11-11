@@ -65,9 +65,18 @@ export class KmsSigner extends AbstractSigner {
   }
 
   async signTransaction(tx) {
-    const t = { ...tx };
-    if (t.from != null) { if ((await resolveAddress(t.from)).toLowerCase() !== (await this.getAddress()).toLowerCase()) throw new Error("from não corresponde à chave KMS"); delete t.from; }
-    const btx = Transaction.from(t);
+    // O ethers pode entregar um objeto Transaction já populado (Signer.sendTransaction) ou um objeto
+    // simples (TransactionLike). O spread de um Transaction não copia os campos (ficam em getters),
+    // então a transação sairia vazia: tratar os dois casos.
+    if (tx.from != null && (await resolveAddress(tx.from)).toLowerCase() !== (await this.getAddress()).toLowerCase()) throw new Error("from não corresponde à chave KMS");
+    let btx;
+    if (tx instanceof Transaction) {
+      btx = tx.clone();
+    } else {
+      const t = { ...tx };
+      delete t.from;
+      btx = Transaction.from(t);
+    }
     btx.signature = await this.#signDigest(btx.unsignedHash);
     return btx.serialized;
   }
