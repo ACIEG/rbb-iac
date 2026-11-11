@@ -2,14 +2,17 @@
 // de Administrador Global no AWS KMS. Equivale ao `account-rules-v2.js addLocalAccount` dos
 // scripts-permissionamento, sem chave privada em arquivo.
 //
-// Uso: node permission-account.mjs <alias-kms> <contracts.json> <endereço> [papel] [dataHash]
+// Uso: node permission-account.mjs <alias-kms> <contracts.json> <endereço> [papel] [dataHash|texto]
 //   alias-kms      ex.: alias/exemplo-rbb-lab-admin (saída `alias` de envs/<rede>-governance)
 //   contracts.json tofu/envs/<rede>/network/contracts.json (rbb-sync-participantes.sh)
 //   papel          DEPLOYER_ROLE (padrão), USER_ROLE, LOCAL_ADMIN_ROLE ou GLOBAL_ADMIN_ROLE
+//   dataHash       o contrato exige um hash não nulo que identifique o registro da conta. Aceita um
+//                  0x... de 32 bytes ou um texto, do qual se calcula o keccak256. Padrão: o texto
+//                  "<alias> <endereço> <papel>", impresso para registro.
 // Ambiente: JSON_RPC_URL (padrão http://127.0.0.1:8545, via rbb-rpc-tunnel.sh), AWS_REGION,
 //   credenciais AWS, RBB_KMS_ROLE_ARN (opcional, papel de assinatura).
 import { readFileSync } from "node:fs";
-import { Contract, JsonRpcProvider, ZeroHash } from "ethers";
+import { Contract, JsonRpcProvider, isHexString, keccak256, toUtf8Bytes } from "ethers";
 import { KmsSigner } from "./kms-signer.mjs";
 
 const ROLES = {
@@ -24,12 +27,14 @@ const ABI = [
   "function getAccount(address account) view returns (tuple(uint256 orgId, address account, bytes32 roleId, bytes32 dataHash, bool active))",
 ];
 
-const [alias, contractsPath, account, roleName = "DEPLOYER_ROLE", dataHash = ZeroHash] = process.argv.slice(2);
+const [alias, contractsPath, account, roleName = "DEPLOYER_ROLE", dataArg] = process.argv.slice(2);
 if (!alias || !contractsPath || !account) {
   console.error("uso: node permission-account.mjs <alias-kms> <contracts.json> <endereço> [papel] [dataHash]");
   process.exit(2);
 }
 const roleId = ROLES[roleName];
+const dataText = dataArg && !isHexString(dataArg, 32) ? dataArg : (dataArg ? null : `${alias} ${account} ${roleName}`);
+const dataHash = dataText ? keccak256(toUtf8Bytes(dataText)) : dataArg;
 if (!roleId) { console.error(`papel desconhecido: ${roleName} (${Object.keys(ROLES).join(", ")})`); process.exit(2); }
 const contracts = JSON.parse(readFileSync(contractsPath, "utf8"));
 const rulesAddr = contracts.AccountRulesV2Impl;
@@ -41,6 +46,7 @@ const admin = await signer.getAddress();
 const rules = new Contract(rulesAddr, ABI, signer);
 console.log(`admin (KMS ${alias}): ${admin}`);
 console.log(`AccountRulesV2Impl: ${rulesAddr} | conta: ${account} | papel: ${roleName}`);
+console.log(`dataHash: ${dataHash}${dataText ? ` = keccak256("${dataText}")` : ""}`);
 
 let existing = null;
 try { existing = await rules.getAccount(account); } catch { /* conta inexistente: getAccount reverte */ }
