@@ -284,10 +284,38 @@ write_node_info() {
   chown "${RBB_USER}:${RBB_USER}" "${DATA_MOUNT}/node-info.json" 2>/dev/null || true
 }
 
+# VM de aplicação (tipo app): sem Besu. Usuário de serviço sem sudo e sem docker (pode usar serviços
+# de usuário do systemd, com linger), node_exporter na 9100 para o Prometheus da organização e
+# atualizações de segurança automáticas sem reinício automático.
+setup_app_host() {
+  local user="${APP_SERVICE_USER:-app}"
+  if ! id "${user}" >/dev/null 2>&1; then
+    useradd --create-home --shell /bin/bash "${user}"
+    log "usuário de serviço ${user} criado (sem sudo, sem docker)"
+  fi
+  mkdir -p /srv/app && chown "${user}:${user}" /srv/app
+  loginctl enable-linger "${user}" >/dev/null 2>&1 || true
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -q prometheus-node-exporter unattended-upgrades >/dev/null
+  systemctl enable --now prometheus-node-exporter >/dev/null 2>&1
+  cat > /etc/apt/apt.conf.d/52-rbb-unattended <<APT
+// Gerado pelo bootstrap do rbb-iac: só correções de segurança, sem reinício automático
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+Unattended-Upgrade::Automatic-Reboot "false";
+APT
+  systemctl enable --now unattended-upgrades >/dev/null 2>&1 || true
+  log "VM de aplicação pronta: usuário ${user}, /srv/app, node_exporter 9100, atualizações de segurança automáticas"
+}
+
 main() {
   log "bootstrap ${NODE_NAME} (${NODE_TYPE}) org=${ORGANIZATION} rede=${RBB_NETWORK}"
   install_docker
   mount_data_volume
+  if [[ "${NODE_TYPE}" == "app" ]]; then
+    setup_app_host
+    log "bootstrap concluído"
+    return
+  fi
   create_user
   install_start_network
   if [[ "${NODE_TYPE}" == "prometheus" ]]; then

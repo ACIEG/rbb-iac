@@ -159,6 +159,19 @@ O layout na VM é o mesmo do roteiro: `/srv/rbb/start-network/` (rbb-cli, `infra
 
 O nó prometheus traz um Grafana em `https://<ip-do-prometheus>/grafana/` (mesmo certificado do NGINX; login próprio, usuário `admin`, senha inicial em `/srv/rbb/prometheus/.grafana-admin-initial`, legível só por root). A fonte de dados e os painéis são provisionados a partir deste repositório (`files/grafana-*`): há dois painéis: **RBB - consenso** (quantos validators o nosso vê, blocos propostos por validator nos últimos 100, nossa fatia e último bloco proposto; alerta `ValidatorNotProposing` quando o nosso validator para de propor) e **RBB - nós e federação**, que mostra distância da ponta, peers, reinícios, altura e memória dos nossos nós, o estado da federação por organização (porta e certificado) e os alertas ativos. Painéis criados pela interface não são versionados; para mudar o padrão, edite o JSON e reenvie com `rbb-update-tools.sh`.
 
+## VM de aplicação (tipo `app`)
+
+Para rodar na mesma sub-rede um serviço da organização que fala com o writer (por exemplo, o processo que envia lotes assinados), o módulo tem o tipo `app`: uma VM sem Besu, sem IP público (sai pelo NAT gateway, com IP fixo), com SSH aceito só a partir do nó de salto, um usuário de serviço sem sudo e sem Docker (`service_user`, com `linger` para serviços `systemctl --user`), `/srv/app` como diretório da aplicação, `node_exporter` na porta 9100 liberada só para o Prometheus da organização (job `app`) e correções de segurança automáticas sem reinício automático.
+
+```hcl
+nodes = {
+  app01 = { type = "app", machine_type = "BV1-2-20", public_ip = false, service_user = "operador" }
+  ...
+}
+```
+
+Deploy e acesso: SSH pelo nó de salto (`rbb-ssh.sh <env> app01`), chaves gerenciadas por `rbb-ssh-keys.sh`. O RPC do writer fica em `<ip privado do writer>:8545` dentro da VPC. Segredos da aplicação: arquivo `0600` do usuário de serviço ou `LoadCredential` do systemd.
+
 ## Armazenamento do Besu: Bonsai ou Forest
 
 O roteiro da RBB não fixa formato; o `docker-compose.yml.hbs` não define `data-storage-format`, então vale o padrão do Besu 25.5.0, que é **Bonsai**: menor uso de disco e memória, adequado a boot, validator, writer e observer-boot, que só precisam do estado atual. **Forest** com `sync-mode FULL` guarda o estado histórico completo (archive) e só é indicado para um nó de leitura que alimente explorador de blocos, auditoria ou indicadores, como o observer archive do explorador do TCU. Não use Forest nos nós núcleo nem no observer-boot público: é mais pesado, e o RPC de um archive não deve ser exposto.

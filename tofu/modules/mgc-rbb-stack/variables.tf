@@ -99,7 +99,9 @@ variable "protect_data_volumes" {
 variable "nodes" {
   description = <<-EOT
     Nós a provisionar, indexados pelo nome no padrão da RBB (boot01, validator01, writer01, observer-boot01, prometheus01).
-    Tipos: boot, validator, writer, observer-boot, prometheus e observer (nó interno de leitura, opcionalmente archive = true: Forest + FULL).
+    Tipos: boot, validator, writer, observer-boot, prometheus, observer (nó interno de leitura, opcionalmente archive = true: Forest + FULL)
+    e app (VM de aplicação na mesma sub-rede, sem Besu: usuário de serviço sem sudo em service_user, node_exporter na 9100
+    coletado pelo Prometheus, SSH só a partir do nó de salto; exige public_ip = false e fica sem volume de dados por padrão).
     Campos opcionais por nó: machine_type, data_volume_size (0 = sem volume extra), public_ip (padrão true),
     p2p_public (padrão: true para boot/validator/observer-boot, false para writer), rpc_public, p2p_port, rpc_port,
     metrics_port, extra_env (BESU_*), container_cpus, container_memory, private_ip_offset (host fixo na sub-rede;
@@ -121,10 +123,16 @@ variable "nodes" {
     container_memory  = optional(string)
     jvm_heap          = optional(string)
     private_ip_offset = optional(number)
+    # Tipo app: nome do usuário de serviço (sem sudo) que opera a aplicação
+    service_user = optional(string)
   }))
   validation {
     condition     = alltrue([for n in var.nodes : !coalesce(n.p2p_public, contains(["boot", "validator", "observer-boot"], n.type)) || n.public_ip])
     error_message = "Nós com p2p_public = true precisam de public_ip = true."
+  }
+  validation {
+    condition     = alltrue([for n in var.nodes : n.type != "app" || !n.public_ip])
+    error_message = "Nós do tipo app ficam sem IP público (saída pelo NAT gateway; SSH pelo nó de salto)."
   }
   validation {
     condition     = alltrue([for n in var.nodes : !n.rpc_public || n.type == "observer-boot"])

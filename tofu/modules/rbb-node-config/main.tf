@@ -1,5 +1,6 @@
 locals {
-  is_besu = var.node.type != "prometheus"
+  is_besu = !contains(["prometheus", "app"], var.node.type)
+  is_app  = var.node.type == "app"
 
   organization_name = coalesce(var.organization_name, upper(var.organization))
 
@@ -44,7 +45,7 @@ locals {
 
   # SSH: dos administradores e de dentro da VPC (salto por um nó com IP público para nós privados)
   ssh_rules = [
-    for cidr in distinct(concat(var.admin_ssh_cidrs, [var.vpc_cidr])) : {
+    for cidr in(var.ssh_cidrs_override != null ? var.ssh_cidrs_override : distinct(concat(var.admin_ssh_cidrs, [var.vpc_cidr]))) : {
       key         = "ssh-${cidr}"
       description = "SSH administrativo"
       direction   = "ingress"
@@ -163,7 +164,20 @@ locals {
     }
   ]
 
-  firewall_rules = concat(local.ssh_rules, local.besu_rules, local.prometheus_rules, local.egress_rules)
+  # VM de aplicação: só o node_exporter (9100) para o Prometheus da organização
+  app_rules = local.is_app ? [
+    for cidr in coalesce(var.metrics_from_cidrs, [var.vpc_cidr]) : {
+      key         = "node-exporter-${cidr}"
+      description = "node_exporter da VM de aplicacao para o Prometheus da organizacao"
+      direction   = "ingress"
+      protocol    = "tcp"
+      port_min    = 9100
+      port_max    = 9100
+      cidr        = cidr
+    }
+  ] : []
+
+  firewall_rules = concat(local.ssh_rules, local.besu_rules, local.prometheus_rules, local.app_rules, local.egress_rules)
 
   node_env = {
     NODE_NAME             = var.node.name
@@ -189,6 +203,7 @@ locals {
     DATA_VOLUME           = var.data_volume
     HAS_GENESIS           = var.genesis_json != null
     ARCHIVE               = var.node.archive
+    APP_SERVICE_USER      = var.node.service_user == null ? "" : var.node.service_user
   }
 
   node_env_file = join("\n", concat(
@@ -212,6 +227,12 @@ locals {
       labels  = { organization = f.organization }
     }
   ])
+  prometheus_app_targets = jsonencode([
+    for t in var.prometheus_app_targets : {
+      targets = ["${t.ip}:${t.port}"]
+      labels  = { node = t.name, organization = local.organization_name, network = "rbb${var.rbb_network == "lab" ? "-lab" : ""}" }
+    }
+  ])
 
   user_data = templatefile("${path.module}/templates/cloud-init.yaml.tftpl", {
     hostname                      = local.hostname
@@ -227,6 +248,7 @@ locals {
     prometheus_rules              = base64gzip(file("${path.module}/files/prometheus-rules.yml"))
     prometheus_local_targets      = base64gzip(local.prometheus_local_targets)
     prometheus_federation_targets = base64gzip(local.prometheus_federation_targets)
+    prometheus_app_targets        = base64gzip(local.prometheus_app_targets)
     prometheus_nginx              = base64gzip(file("${path.module}/files/prometheus-nginx.conf"))
     prometheus_setup              = base64gzip(file("${path.module}/files/prometheus-setup.sh"))
     prometheus_docker             = base64gzip(file("${path.module}/files/prometheus-compose.yml"))

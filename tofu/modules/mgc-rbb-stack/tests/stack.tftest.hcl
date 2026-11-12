@@ -192,3 +192,41 @@ run "writer_privado_cria_nat" {
     error_message = "Somente o boot deve ter IP público."
   }
 }
+
+run "vm_de_aplicacao" {
+  command = plan
+
+  variables {
+    nodes = {
+      boot01       = { type = "boot" }
+      writer01     = { type = "writer", public_ip = false }
+      prometheus01 = { type = "prometheus", data_volume_size = 0 }
+      app01        = { type = "app", machine_type = "BV1-2-20", public_ip = false, service_user = "operador" }
+    }
+  }
+
+  assert {
+    condition     = output.nodes["app01"].private_ip == "10.120.1.71"
+    error_message = "VM de aplicação deve ficar na faixa .71."
+  }
+  assert {
+    condition     = !contains(keys(mgc_block_storage_volumes.data), "app01")
+    error_message = "VM de aplicação não tem volume de dados por padrão."
+  }
+  assert {
+    condition     = [for r in module.node_config["app01"].firewall_rules : r.cidr if r.port_min == 22] == ["10.120.1.11/32"]
+    error_message = "SSH da VM de aplicação só a partir do nó de salto (boot01)."
+  }
+  assert {
+    condition     = [for r in module.node_config["app01"].firewall_rules : r.cidr if r.port_min == 9100] == ["10.120.1.61/32"]
+    error_message = "node_exporter da VM de aplicação só para o Prometheus da organização."
+  }
+  assert {
+    condition     = length([for r in module.node_config["app01"].firewall_rules : r if r.direction == "ingress" && !contains([22, 9100], r.port_min)]) == 0
+    error_message = "VM de aplicação não deve ter outras portas de entrada (sem P2P, RPC ou métricas Besu)."
+  }
+  assert {
+    condition     = strcontains(module.node_config["prometheus01"].user_data, "targets/apps.json") && length(output.prometheus_targets) == 2
+    error_message = "Prometheus recebe os alvos de aplicação em apps.json e continua coletando só os nós Besu no job rbb."
+  }
+}

@@ -32,6 +32,11 @@ scrape_configs:
         target_label: "__address__"
         replacement: "$1:9546"
 
+  # VMs de aplicação da organização (tipo app): node_exporter (CPU, memória, disco, rede)
+  - job_name: app
+    file_sd_configs:
+      - files: ["/etc/prometheus/targets/apps.json"]
+
   # Job para coletar as métricas de outras organizações (Prometheus expostos via NGINX mTLS, porta 8443).
   - job_name: rbb-federado
     honor_labels: false
