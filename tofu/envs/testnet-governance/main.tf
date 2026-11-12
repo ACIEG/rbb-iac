@@ -130,7 +130,7 @@ resource "aws_iam_role_policy" "issuer_queue" {
 resource "aws_iam_user" "issuer_queue" {
   count = var.issuer_queue_service_user != null ? 1 : 0
   name  = var.issuer_queue_service_user
-  tags  = { "rbb:purpose" = "fila de emissao (assume so o papel da fila)" }
+  tags  = { "rbb:purpose" = "fila de emissao - assume so o papel da fila" }
 }
 
 data "aws_iam_policy_document" "issuer_queue_user" {
