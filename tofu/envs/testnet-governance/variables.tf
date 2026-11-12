@@ -55,3 +55,26 @@ variable "application_service_users" {
   type        = list(string)
   default     = []
 }
+
+variable "issuer_keys" {
+  description = <<-EOT
+    Chaves de emissor (uma por emissor, no KMS): cada id cria alias/<org>-rbb-lab-issuer-<id>. Nenhuma tem papel
+    próprio: todas são assinadas pelo papel único da fila (<org>-rbb-lab-issuer-queue), que só pode kms:Sign e
+    kms:GetPublicKey nelas e tem negação explícita nas demais chaves (governança e aplicação). Emissor novo = id novo
+    aqui e um apply; cadastre o endereço de cada chave na RBB (permission-account.mjs) como USER_ROLE ou DEPLOYER_ROLE.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "issuer_queue_service_user" {
+  description = "Conta de serviço IAM (sem console) da fila de emissão: só pode assumir o papel da fila. Nulo = não cria."
+  type        = string
+  default     = null
+}
+
+variable "issuer_queue_source_ips" {
+  description = "IPs (CIDR) de onde a fila assume o papel; vazio = sem restrição. Ex.: IP de saída do NAT da VPC."
+  type        = list(string)
+  default     = []
+}
