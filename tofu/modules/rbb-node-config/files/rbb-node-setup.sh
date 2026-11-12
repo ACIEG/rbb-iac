@@ -256,6 +256,11 @@ CRON
   # Vigia de peers: a cada 5 min; reinicia o Besu se ficar sem peers em 2 verificações seguidas (ver rbb-node watchdog)
   printf '*/5 * * * * root /usr/local/bin/rbb-node watchdog >/dev/null 2>&1\n' > /etc/cron.d/rbb-watchdog
   chmod 0644 /etc/cron.d/rbb-watchdog
+  # Proxy JSON-RPC com métodos permitidos (opcional; ver rbb-node rpc-proxy)
+  if [[ "${RPC_PROXY_ENABLED:-false}" == "true" ]]; then
+    log "instalando o proxy JSON-RPC (${RPC_PROXY_SOURCE:-RBBNet/rbb-iac@main}, porta ${RPC_PROXY_PORT:-8546})"
+    /usr/local/bin/rbb-node rpc-proxy install || log "rpc-proxy: falha na instalação (rode 'rbb-node rpc-proxy install' depois)"
+  fi
 }
 
 # Exportador de peers/disco/memória (porta 9546, só VPC) para o Prometheus da organização.

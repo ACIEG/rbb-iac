@@ -46,6 +46,13 @@ Operação (passo 4 do roteiro)
   watchdog                  reconecta peers estáticos ausentes (admin_addPeer); reinicia o Besu de forma controlada
                             acima de 93% da memória do contêiner (1x/6h) ou se ficar sem peers por 2 verificações (cron 5 min)
 
+Proxy JSON-RPC com métodos permitidos (tools/rbb-rpc-proxy)
+  rpc-proxy install         baixa o código (RPC_PROXY_SOURCE do node.env), constrói a imagem e sobe o proxy na porta
+                            RPC_PROXY_PORT, encaminhando ao RPC local só os métodos permitidos (RPC_PROXY_ALLOW)
+  rpc-proxy status          estado do contêiner e teste de um método permitido e de um recusado
+  rpc-proxy logs [-f]       logs do proxy
+  rpc-proxy remove          para e remove o proxy
+
 Prometheus (somente nós prometheus)
   prometheus clients <arquivo.pem>      instala o bundle de certificados dos demais partícipes e recarrega o NGINX
   prometheus federation <arquivo.json>  substitui os alvos federados (formato file_sd: [{targets:[...],labels:{organization}}])
@@ -255,6 +262,53 @@ cmd_prometheus() {
   esac
 }
 
+# Proxy JSON-RPC com lista de métodos permitidos, para aplicações que só precisam ler a cadeia e enviar
+# transações assinadas (sem ADMIN, DEBUG, TRACE, PERM, TXPOOL). Roda em contêiner na rede do host:
+# escuta RPC_PROXY_PORT e encaminha a 127.0.0.1:RPC_PORT. Quem alcança o proxy é decidido no firewall.
+PROXY_DIR="${DATA_MOUNT}/rpc-proxy"
+as_rbb_proxy() { sudo -u rbb -H bash -c "cd '${PROXY_DIR}' && $*"; }
+cmd_rpc_proxy() {
+  need_besu
+  case "${1:-}" in
+    install)
+      local src="${RPC_PROXY_SOURCE:-RBBNet/rbb-iac@main}" port="${RPC_PROXY_PORT:-8546}"
+      local repo="${src%@*}" ref="${src#*@}"
+      mkdir -p "${PROXY_DIR}"
+      echo "baixando tools/rbb-rpc-proxy de ${repo}@${ref}"
+      rm -rf "${PROXY_DIR}/src.new" && mkdir -p "${PROXY_DIR}/src.new"
+      curl -fsSL "https://github.com/${repo}/archive/${ref}.tar.gz" | tar xz -C "${PROXY_DIR}/src.new" --strip-components=3 --wildcards "*/tools/rbb-rpc-proxy/*"
+      [[ -f "${PROXY_DIR}/src.new/main.go" && -f "${PROXY_DIR}/src.new/Dockerfile" ]] || { echo "código do proxy não encontrado em ${repo}@${ref}" >&2; exit 1; }
+      rm -rf "${PROXY_DIR}/src" && mv "${PROXY_DIR}/src.new" "${PROXY_DIR}/src"
+      printf '%s\n' "${src}" > "${PROXY_DIR}/src/.rbb-source"
+      cat > "${PROXY_DIR}/docker-compose.yml" <<COMPOSE
+services:
+  rpc-proxy:
+    build: ./src
+    container_name: rbb-rpc-proxy
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    environment:
+      LISTEN: ":${port}"
+      UPSTREAM: "http://127.0.0.1:${RPC_PORT}"
+      ALLOW: "${RPC_PROXY_ALLOW:-}"
+COMPOSE
+      chown -R rbb:rbb "${PROXY_DIR}"
+      as_rbb_proxy "docker compose up -d --build" 2>&1 | tail -2
+      echo "proxy no ar na porta ${port}: rbb-node rpc-proxy status" ;;
+    status)
+      [[ -f "${PROXY_DIR}/docker-compose.yml" ]] || { echo "proxy não instalado (rbb-node rpc-proxy install)"; exit 1; }
+      echo "código: $(cat "${PROXY_DIR}/src/.rbb-source" 2>/dev/null || echo '?') | porta ${RPC_PROXY_PORT:-8546}"
+      as_rbb_proxy "docker compose ps --format '{{.Name}} {{.Status}}'"
+      local url="http://127.0.0.1:${RPC_PROXY_PORT:-8546}"
+      echo "eth_chainId: $(curl -s -m 5 -X POST -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' "${url}" | jq -c '.result // .error')"
+      echo "admin_peers: $(curl -s -m 5 -X POST -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","method":"admin_peers","params":[],"id":1}' "${url}" | jq -c '.error.message // .result')" ;;
+    logs)   shift; as_rbb_proxy "docker compose logs $*" ;;
+    remove) [[ -f "${PROXY_DIR}/docker-compose.yml" ]] && as_rbb_proxy "docker compose down"; echo "proxy removido" ;;
+    *) usage; exit 1 ;;
+  esac
+}
+
 case "${1:-}" in
   info)      cmd_info ;;
   enode)     shift; cmd_enode "$@" ;;
@@ -274,6 +328,7 @@ case "${1:-}" in
   jfr-clean) cmd_jfr_clean ;;
   watchdog)  cmd_watchdog ;;
   prometheus) shift; cmd_prometheus "$@" ;;
+  rpc-proxy) shift; cmd_rpc_proxy "$@" ;;
   -h|--help|help|"") usage ;;
   *) usage; exit 1 ;;
 esac

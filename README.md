@@ -159,6 +159,22 @@ O layout na VM é o mesmo do roteiro: `/srv/rbb/start-network/` (rbb-cli, `infra
 
 O nó prometheus traz um Grafana em `https://<ip-do-prometheus>/grafana/` (mesmo certificado do NGINX; login próprio, usuário `admin`, senha inicial em `/srv/rbb/prometheus/.grafana-admin-initial`, legível só por root). A fonte de dados e os painéis são provisionados a partir deste repositório (`files/grafana-*`): há dois painéis: **RBB - consenso** (quantos validators o nosso vê, blocos propostos por validator nos últimos 100, nossa fatia e último bloco proposto; alerta `ValidatorNotProposing` quando o nosso validator para de propor) e **RBB - nós e federação**, que mostra distância da ponta, peers, reinícios, altura e memória dos nossos nós, o estado da federação por organização (porta e certificado) e os alertas ativos. Painéis criados pela interface não são versionados; para mudar o padrão, edite o JSON e reenvie com `rbb-update-tools.sh`.
 
+## RPC do writer para aplicações: métodos permitidos e quem chama
+
+O RPC do Besu expõe também ADMIN, DEBUG, TRACE, PERM e TXPOOL, que uma aplicação não deve alcançar. Duas opções no módulo, combináveis por nó:
+
+- `rpc_from_vpc = false` tira a regra que libera a porta RPC para a VPC inteira; só `rpc_cidrs` (e `localhost`, usado pelo exportador, pelo vigia e pelo túnel) alcançam o nó.
+- `rpc_proxy = { enabled = true, from_cidrs = ["10.120.1.71/32"] }` sobe `tools/rbb-rpc-proxy` no nó (contêiner, porta 8546): só os métodos da lista passam ao Besu (padrão: leitura `eth_`/`net_`, `web3_clientVersion` e `eth_sendRawTransaction`), os demais recebem `-32601`, inclusive dentro de lotes. `allow` personaliza a lista; `from_cidrs` nomeia quem pode chamar.
+
+As métricas (9545, 9546 e 9100) ficam liberadas só para o IP do Prometheus da organização, em todos os nós.
+
+```hcl
+writer01 = { type = "writer", public_ip = false, rpc_from_vpc = false,
+             rpc_proxy = { enabled = true, from_cidrs = ["10.120.1.71/32"] } }
+```
+
+Em nó já provisionado: `rbb-update-tools.sh`, variáveis `RPC_PROXY_*` no `/etc/rbb/node.env` e `sudo rbb-node rpc-proxy install`; `rbb-node rpc-proxy status` testa um método permitido e um recusado.
+
 ## VM de aplicação (tipo `app`)
 
 Para rodar na mesma sub-rede um serviço da organização que fala com o writer (por exemplo, o processo que envia lotes assinados), o módulo tem o tipo `app`: uma VM sem Besu, sem IP público (sai pelo NAT gateway, com IP fixo), com SSH aceito só a partir do nó de salto, um usuário de serviço sem sudo e sem Docker (`service_user`, com `linger` para serviços `systemctl --user`), `/srv/app` como diretório da aplicação, `node_exporter` na porta 9100 liberada só para o Prometheus da organização (job `app`) e correções de segurança automáticas sem reinício automático.

@@ -63,6 +63,8 @@ module "node_config" {
     archive      = each.value.archive
     extra_env    = each.value.extra_env
     service_user = each.value.service_user
+    rpc_from_vpc = each.value.rpc_from_vpc
+    rpc_proxy    = each.value.rpc_proxy
   }
 
   private_ip = local.private_ips[each.key]
@@ -91,7 +93,8 @@ module "node_config" {
 
   # VM de aplicação: SSH só a partir do nó de salto; métricas só para o Prometheus da organização
   ssh_cidrs_override = each.value.type == "app" && local.bastion_private_ip != null ? ["${local.bastion_private_ip}/32"] : null
-  metrics_from_cidrs = each.value.type == "app" ? local.prometheus_private_cidrs : null
+  # Métricas (Besu, exportador, node_exporter) só para o Prometheus da organização, em todos os nós
+  metrics_from_cidrs = length(local.prometheus_private_cidrs) > 0 ? local.prometheus_private_cidrs : null
 }
 
 # ---------------------------------------------------------------------------
