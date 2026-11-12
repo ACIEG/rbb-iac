@@ -31,7 +31,7 @@ variable "node" {
   description = "Descrição do nó, conforme o padrão de nomes da RBB (<tipo><sequencial>, ex.: validator01)."
   type = object({
     name         = string
-    type         = string # boot | validator | writer | observer-boot | observer | prometheus
+    type         = string # boot | validator | writer | observer-boot | observer | prometheus | app
     p2p_port     = optional(number, 30303)
     rpc_port     = optional(number, 8545)
     metrics_port = optional(number, 9545)
@@ -47,10 +47,12 @@ variable "node" {
     archive = optional(bool, false)
     # Variáveis de ambiente extras do Besu (BESU_*), aplicadas via rbb-cli.
     extra_env = optional(map(string), {})
+    # Tipo app: usuário de serviço (sem sudo) que opera a aplicação na VM.
+    service_user = optional(string)
   })
   validation {
-    condition     = contains(["boot", "validator", "writer", "observer-boot", "observer", "prometheus"], var.node.type)
-    error_message = "node.type deve ser boot, validator, writer, observer-boot, observer ou prometheus."
+    condition     = contains(["boot", "validator", "writer", "observer-boot", "observer", "prometheus", "app"], var.node.type)
+    error_message = "node.type deve ser boot, validator, writer, observer-boot, observer, prometheus ou app."
   }
   validation {
     condition     = can(regex("^${var.node.type}[0-9]{2}$", var.node.name))
@@ -216,4 +218,26 @@ variable "ssh_user" {
   description = "Usuário padrão da imagem (usado apenas em mensagens de ajuda)."
   type        = string
   default     = "ubuntu"
+}
+
+variable "ssh_cidrs_override" {
+  description = "Se definido, substitui as origens de SSH (admin_ssh_cidrs + VPC). Usado no tipo app: só o nó de salto."
+  type        = list(string)
+  default     = null
+}
+
+variable "metrics_from_cidrs" {
+  description = "Origens permitidas na porta de métricas do tipo app (node_exporter, 9100). Nulo = VPC inteira."
+  type        = list(string)
+  default     = null
+}
+
+variable "prometheus_app_targets" {
+  description = "Somente para nós prometheus: VMs de aplicação (tipo app) a coletar no job app (node_exporter)."
+  type = list(object({
+    name = string
+    ip   = string
+    port = number
+  }))
+  default = []
 }
