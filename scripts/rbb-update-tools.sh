@@ -34,6 +34,9 @@ for node in ${nodes[@]+"${nodes[@]}"}; do
     done
     # prometheus.yml: o modelo não usa variáveis (templatefile com mapa vazio), então o arquivo é o próprio
     node_ssh "${env}" "${node}" 'cat > /tmp/py && sudo install -m 0644 /tmp/py /etc/rbb/prometheus/prometheus.yml' < "${INFRA_DIR}/tofu/modules/rbb-node-config/templates/prometheus.yml.tftpl"
+    # O prometheus.yml em uso é bind-mount de arquivo único: escrever no mesmo inode (tee), nunca substituir
+    # o arquivo (install/mv), senão o contêiner continua lendo o inode antigo e o reload não vê a mudança.
+    node_ssh "${env}" "${node}" 'cat > /tmp/py && sudo tee /srv/rbb/prometheus/prometheus.yml < /tmp/py >/dev/null && sudo rbb-node prometheus reload' < "${INFRA_DIR}/tofu/modules/rbb-node-config/templates/prometheus.yml.tftpl"
   fi
   if ${rerun}; then
     echo "   reexecutando bootstrap (log em /var/log/rbb-node-setup.log)"
