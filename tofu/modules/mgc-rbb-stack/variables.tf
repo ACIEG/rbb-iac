@@ -125,6 +125,17 @@ variable "nodes" {
     private_ip_offset = optional(number)
     # Tipo app: nome do usuário de serviço (sem sudo) que opera a aplicação
     service_user = optional(string)
+    # RPC: aceitar chamadas de toda a VPC (padrão) ou só de rpc_cidrs. Com false, nomeie quem chama em rpc_cidrs
+    # ou use rpc_proxy para expor só métodos permitidos a origens específicas.
+    rpc_from_vpc = optional(bool, true)
+    # Proxy JSON-RPC com lista de métodos permitidos (tools/rbb-rpc-proxy) na frente do RPC do nó.
+    rpc_proxy = optional(object({
+      enabled    = optional(bool, false)
+      port       = optional(number, 8546)
+      from_cidrs = optional(list(string), [])              # quem pode chamar o proxy (ex.: IP da VM de aplicação)
+      allow      = optional(list(string), [])              # métodos permitidos; vazio = padrão do proxy (leitura eth_/net_ + eth_sendRawTransaction)
+      source     = optional(string, "RBBNet/rbb-iac@main") # owner/repo@ref de onde o código do proxy é baixado
+    }), {})
   }))
   validation {
     condition     = alltrue([for n in var.nodes : !coalesce(n.p2p_public, contains(["boot", "validator", "observer-boot"], n.type)) || n.public_ip])

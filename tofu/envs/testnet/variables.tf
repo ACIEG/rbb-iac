@@ -135,6 +135,17 @@ variable "nodes" {
     container_memory  = optional(string)
     jvm_heap          = optional(string)
     private_ip_offset = optional(number)
+    # Atenção: campos novos do objeto precisam ser declarados também aqui (e em modules/mgc-rbb-stack);
+    # atributos desconhecidos são descartados em silêncio na conversão de tipo.
+    service_user = optional(string)
+    rpc_from_vpc = optional(bool, true)
+    rpc_proxy = optional(object({
+      enabled    = optional(bool, false)
+      port       = optional(number, 8546)
+      from_cidrs = optional(list(string), [])
+      allow      = optional(list(string), [])
+      source     = optional(string, "RBBNet/rbb-iac@main")
+    }), {})
   }))
   default = {
     boot01          = { type = "boot" }

@@ -41,7 +41,8 @@ locals {
     var.participant_cidrs # writer de parceiro (p2p_public = true): boots das outras organizações
   )))
 
-  rpc_cidrs = distinct(concat([var.vpc_cidr], var.rpc_cidrs, var.node.rpc_public ? ["0.0.0.0/0"] : []))
+  rpc_cidrs    = distinct(concat(var.node.rpc_from_vpc ? [var.vpc_cidr] : [], var.rpc_cidrs, var.node.rpc_public ? ["0.0.0.0/0"] : []))
+  metrics_from = coalesce(var.metrics_from_cidrs, [var.vpc_cidr])
 
   # SSH: dos administradores e de dentro da VPC (salto por um nó com IP público para nós privados)
   ssh_rules = [
@@ -94,24 +95,34 @@ locals {
         cidr        = cidr
       }
     ],
-    [
-      {
-        key         = "metrics-vpc"
+    flatten([
+      for cidr in local.metrics_from : [{
+        key         = "metrics-${cidr}"
         description = "Metricas Besu para o Prometheus da organizacao"
         direction   = "ingress"
         protocol    = "tcp"
         port_min    = var.node.metrics_port
         port_max    = var.node.metrics_port
-        cidr        = var.vpc_cidr
-      },
-      {
-        key         = "exporter-vpc"
+        cidr        = cidr
+        }, {
+        key         = "exporter-${cidr}"
         description = "Exportador rbb-peers (peers, disco, memoria) para o Prometheus da organizacao"
         direction   = "ingress"
         protocol    = "tcp"
         port_min    = 9546
         port_max    = 9546
-        cidr        = var.vpc_cidr
+        cidr        = cidr
+      }]
+    ]),
+    [
+      for cidr in var.node.rpc_proxy.enabled ? var.node.rpc_proxy.from_cidrs : [] : {
+        key         = "rpc-proxy-${cidr}"
+        description = "Proxy JSON-RPC com metodos permitidos (rbb-rpc-proxy)"
+        direction   = "ingress"
+        protocol    = "tcp"
+        port_min    = var.node.rpc_proxy.port
+        port_max    = var.node.rpc_proxy.port
+        cidr        = cidr
       }
     ]
   ) : []
@@ -166,7 +177,7 @@ locals {
 
   # VM de aplicação: só o node_exporter (9100) para o Prometheus da organização
   app_rules = local.is_app ? [
-    for cidr in coalesce(var.metrics_from_cidrs, [var.vpc_cidr]) : {
+    for cidr in local.metrics_from : {
       key         = "node-exporter-${cidr}"
       description = "node_exporter da VM de aplicacao para o Prometheus da organizacao"
       direction   = "ingress"
@@ -204,6 +215,10 @@ locals {
     HAS_GENESIS           = var.genesis_json != null
     ARCHIVE               = var.node.archive
     APP_SERVICE_USER      = var.node.service_user == null ? "" : var.node.service_user
+    RPC_PROXY_ENABLED     = var.node.rpc_proxy.enabled
+    RPC_PROXY_PORT        = var.node.rpc_proxy.port
+    RPC_PROXY_ALLOW       = join(",", var.node.rpc_proxy.allow)
+    RPC_PROXY_SOURCE      = var.node.rpc_proxy.source
   }
 
   node_env_file = join("\n", concat(

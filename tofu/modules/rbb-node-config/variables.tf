@@ -49,6 +49,17 @@ variable "node" {
     extra_env = optional(map(string), {})
     # Tipo app: usuário de serviço (sem sudo) que opera a aplicação na VM.
     service_user = optional(string)
+    # RPC: aceitar chamadas de toda a VPC (padrão) ou só de rpc_cidrs. Com false, nomeie quem chama em rpc_cidrs
+    # ou use rpc_proxy para expor só métodos permitidos a origens específicas.
+    rpc_from_vpc = optional(bool, true)
+    # Proxy JSON-RPC com lista de métodos permitidos (tools/rbb-rpc-proxy) na frente do RPC do nó.
+    rpc_proxy = optional(object({
+      enabled    = optional(bool, false)
+      port       = optional(number, 8546)
+      from_cidrs = optional(list(string), [])              # quem pode chamar o proxy (ex.: IP da VM de aplicação)
+      allow      = optional(list(string), [])              # métodos permitidos; vazio = padrão do proxy (leitura eth_/net_ + eth_sendRawTransaction)
+      source     = optional(string, "RBBNet/rbb-iac@main") # owner/repo@ref de onde o código do proxy é baixado
+    }), {})
   })
   validation {
     condition     = contains(["boot", "validator", "writer", "observer-boot", "observer", "prometheus", "app"], var.node.type)
@@ -227,7 +238,7 @@ variable "ssh_cidrs_override" {
 }
 
 variable "metrics_from_cidrs" {
-  description = "Origens permitidas na porta de métricas do tipo app (node_exporter, 9100). Nulo = VPC inteira."
+  description = "Origens permitidas nas portas de métricas (Besu 9545, exportador 9546, node_exporter 9100). Nulo = VPC inteira; o stack passa o IP do Prometheus da organização."
   type        = list(string)
   default     = null
 }

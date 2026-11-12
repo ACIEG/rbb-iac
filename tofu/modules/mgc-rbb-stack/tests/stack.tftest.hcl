@@ -230,3 +230,33 @@ run "vm_de_aplicacao" {
     error_message = "Prometheus recebe os alvos de aplicação em apps.json e continua coletando só os nós Besu no job rbb."
   }
 }
+
+run "rpc_restrito_e_proxy" {
+  command = plan
+
+  variables {
+    nodes = {
+      boot01       = { type = "boot" }
+      writer01     = { type = "writer", public_ip = false, rpc_from_vpc = false, rpc_proxy = { enabled = true, from_cidrs = ["10.120.1.71/32"] } }
+      prometheus01 = { type = "prometheus", data_volume_size = 0 }
+      app01        = { type = "app", public_ip = false }
+    }
+  }
+
+  assert {
+    condition     = length([for r in module.node_config["writer01"].firewall_rules : r if r.port_min == 8545]) == 0
+    error_message = "Com rpc_from_vpc = false e sem rpc_cidrs, nenhuma regra deve liberar a porta RPC."
+  }
+  assert {
+    condition     = [for r in module.node_config["writer01"].firewall_rules : r.cidr if r.port_min == 8546] == ["10.120.1.71/32"]
+    error_message = "O proxy deve ser alcançável só pela VM de aplicação."
+  }
+  assert {
+    condition     = alltrue([for k in ["boot01", "writer01"] : [for r in module.node_config[k].firewall_rules : r.cidr if r.port_min == 9545] == ["10.120.1.61/32"]])
+    error_message = "Métricas Besu liberadas só para o Prometheus da organização."
+  }
+  assert {
+    condition     = contains([for r in module.node_config["boot01"].firewall_rules : r.cidr if r.port_min == 8545], "10.120.0.0/16")
+    error_message = "Nós sem rpc_from_vpc = false mantêm o RPC para a VPC (compatibilidade)."
+  }
+}
