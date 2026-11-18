@@ -208,8 +208,9 @@ variable "prometheus_federation_targets" {
 variable "observer_boot_p2p_public" {
   description = <<-EOT
     Se true (padrão, como no roteiro), o P2P dos observer-boots aceita qualquer origem da internet, para observadores
-    externos. Se false, aceita só os IPs dos parceiros (mesmo conjunto dos boots) e a VPC: mitigação temporária quando
-    há vulnerabilidade sem correção na JVM do Besu e não existem observadores externos. Reverter quando corrigida.
+    externos. Se false, aceita só a VPC (os observers próprios): parceiros não se conectam ao observer-boot de outra
+    organização, então não há regra por parceiro, o que também poupa a cota de regras de firewall da conta. Mitigação
+    temporária quando há vulnerabilidade sem correção na JVM do Besu e não existem observadores externos.
   EOT
   type        = bool
   default     = true

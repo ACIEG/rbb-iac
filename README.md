@@ -264,7 +264,7 @@ O uso do dotswap é opcional; qualquer gerenciador de segredos serve, desde que 
 
 ## Segurança
 
-Mitigação temporária para vulnerabilidade na JVM do Besu sem imagem corrigida: `observer_boot_p2p_public = false` fecha o P2P dos observer-boots para os IPs dos parceiros (o único ponto onde a JVM fica aberta à internet; boot e validator já aceitam só parceiros, e RPC e métricas não são públicos). Só regra de firewall, sem reinício; reverter quando a correção for aplicada.
+Mitigação temporária para vulnerabilidade na JVM do Besu sem imagem corrigida: `observer_boot_p2p_public = false` fecha o P2P dos observer-boots para a VPC (o único ponto onde a JVM fica aberta à internet; boot e validator já aceitam só parceiros, e RPC e métricas não são públicos; parceiros não se conectam ao observer-boot de outra organização). Só regra de firewall, sem reinício; reverter quando a correção for aplicada.
 
 
 - SSH restrito a `admin_ssh_cidrs`; nunca use `0.0.0.0/0`.
