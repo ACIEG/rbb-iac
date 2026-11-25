@@ -234,6 +234,8 @@ configure_node() {
   chown -R "${RBB_USER}:${RBB_USER}" "${SN_DIR}"
 
   as_rbb "./rbb-cli config render-templates" >/dev/null
+  # Remove chaves duplicadas no environment (template da rede x sobrescritas do nó); ver rbb-node dedupe_compose
+  /usr/local/bin/rbb-node render >/dev/null 2>&1 || true
 }
 
 # ---------------------------------------------------------------------------
