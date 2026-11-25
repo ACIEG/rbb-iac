@@ -99,11 +99,13 @@ variable "protect_data_volumes" {
 variable "nodes" {
   description = <<-EOT
     Nós a provisionar, indexados pelo nome no padrão da RBB (boot01, validator01, writer01, observer-boot01, prometheus01).
-    Tipos: boot, validator, writer, observer-boot, prometheus e observer (nó interno de leitura, opcionalmente archive = true: Forest + FULL).
+    Tipos: boot, validator, writer, observer-boot, prometheus, observer (nó interno de leitura, opcionalmente archive = true: Forest + FULL)
+    e app (VM de aplicação na mesma sub-rede, sem Besu: usuário de serviço sem sudo em service_user, node_exporter na 9100
+    coletado pelo Prometheus, SSH só a partir do nó de salto; exige public_ip = false e fica sem volume de dados por padrão).
     Campos opcionais por nó: machine_type, data_volume_size (0 = sem volume extra), public_ip (padrão true),
     p2p_public (padrão: true para boot/validator/observer-boot, false para writer), rpc_public, p2p_port, rpc_port,
     metrics_port, extra_env (BESU_*), container_cpus, container_memory, private_ip_offset (host fixo na sub-rede;
-    padrão: base do tipo + sequencial, ex.: validator01 = .21).
+    padrão: base do tipo + sequencial, ex.: validator01 = .21), permissioning_plugin (liga o plugin neste nó).
   EOT
   type = map(object({
     type              = string
@@ -121,10 +123,29 @@ variable "nodes" {
     container_memory  = optional(string)
     jvm_heap          = optional(string)
     private_ip_offset = optional(number)
+    # Tipo app: nome do usuário de serviço (sem sudo) que opera a aplicação
+    service_user = optional(string)
+    # RPC: aceitar chamadas de toda a VPC (padrão) ou só de rpc_cidrs. Com false, nomeie quem chama em rpc_cidrs
+    # ou use rpc_proxy para expor só métodos permitidos a origens específicas.
+    rpc_from_vpc = optional(bool, true)
+    # Proxy JSON-RPC com lista de métodos permitidos (tools/rbb-rpc-proxy) na frente do RPC do nó.
+    rpc_proxy = optional(object({
+      enabled    = optional(bool, false)
+      port       = optional(number, 8546)
+      from_cidrs = optional(list(string), [])              # quem pode chamar o proxy (ex.: IP da VM de aplicação)
+      allow      = optional(list(string), [])              # métodos permitidos; vazio = padrão do proxy (leitura eth_/net_ + eth_sendRawTransaction)
+      source     = optional(string, "RBBNet/rbb-iac@main") # owner/repo@ref de onde o código do proxy é baixado
+    }), {})
+    # Liga/desliga o plugin de permissionamento neste nó (nulo = permissioning_plugin.enabled)
+    permissioning_plugin = optional(bool)
   }))
   validation {
     condition     = alltrue([for n in var.nodes : !coalesce(n.p2p_public, contains(["boot", "validator", "observer-boot"], n.type)) || n.public_ip])
     error_message = "Nós com p2p_public = true precisam de public_ip = true."
+  }
+  validation {
+    condition     = alltrue([for n in var.nodes : n.type != "app" || !n.public_ip])
+    error_message = "Nós do tipo app ficam sem IP público (saída pelo NAT gateway; SSH pelo nó de salto)."
   }
   validation {
     condition     = alltrue([for n in var.nodes : !n.rpc_public || n.type == "observer-boot"])
@@ -216,4 +237,50 @@ variable "prometheus_federation_targets" {
     target       = string
   }))
   default = []
+}
+
+variable "validator_monitor" {
+  description = <<-EOT
+    Monitoração automática de validators (RBBNet/monitoracao-validadores), instalada nos nós validator quando enabled = true.
+    A cada interval_seconds consulta qbft_getSignerMetrics dos últimos block_interval blocos no próprio validator e vota
+    (qbft_proposeValidatorVote) pela exclusão de quem não propôs nenhum bloco, como a rede espera de cada partícipe.
+    repo é owner/repo no GitHub e ref uma branch, tag ou commit (o código é baixado como tarball, sem git).
+  EOT
+  type = object({
+    enabled          = optional(bool, false)
+    repo             = optional(string, "RBBNet/monitoracao-validadores")
+    ref              = optional(string, "main")
+    block_interval   = optional(number, 2000)
+    interval_seconds = optional(number, 300)
+    image            = optional(string, "node:24-alpine")
+  })
+  default = {}
+}
+
+variable "permissioning_plugin" {
+  description = <<-EOT
+    Plugin de permissionamento on-chain da RBB (RBBNet/besu-permissioning-plugin), que substitui o permissionamento
+    nativo removido do Besu a partir da 25.6. Versões fixadas: imagem do Besu compatível, URL do jar do release e seu SHA-256.
+    enabled liga o plugin nos nós (pode ser sobreposto por nó em nodes[*].permissioning_plugin). A instalação troca a
+    imagem do Besu e monta o jar via docker-compose.override.yml, mantendo chave e banco (rbb-node plugin install).
+    Só para nós já sincronizados: um nó novo sobe com a imagem padrão e recebe o plugin depois de sincronizar.
+  EOT
+  type = object({
+    enabled    = optional(bool, false)
+    besu_image = optional(string, "hyperledger/besu:25.12.0@sha256:4ef9e934bb321d916ff245981fd65100dc41446b26b2bed47a2b7d09139a3cbe")
+    jar_url    = optional(string, "https://github.com/RBBNet/besu-permissioning-plugin/releases/download/v1.0.0-rc.2/besu-plugin-permissioning.jar")
+    jar_sha256 = optional(string, "adcf767aa6583877b123a6f726757123d50200b202ab83ea403591e10ea9deed")
+  })
+  default = {}
+}
+
+variable "observer_boot_p2p_public" {
+  description = <<-EOT
+    Se true (padrão, como no roteiro), o P2P dos observer-boots aceita qualquer origem da internet, para observadores
+    externos. Se false, aceita só a VPC (os observers próprios): parceiros não se conectam ao observer-boot de outra
+    organização, então não há regra por parceiro, o que também poupa a cota de regras de firewall da conta. Mitigação
+    temporária quando há vulnerabilidade sem correção na JVM do Besu e não existem observadores externos.
+  EOT
+  type        = bool
+  default     = true
 }

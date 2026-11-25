@@ -46,6 +46,25 @@ Operação (passo 4 do roteiro)
   watchdog                  reconecta peers estáticos ausentes (admin_addPeer); reinicia o Besu de forma controlada
                             acima de 93% da memória do contêiner (1x/6h) ou se ficar sem peers por 2 verificações (cron 5 min)
 
+Proxy JSON-RPC com métodos permitidos (tools/rbb-rpc-proxy)
+  rpc-proxy install         baixa o código (RPC_PROXY_SOURCE do node.env), constrói a imagem e sobe o proxy na porta
+                            RPC_PROXY_PORT, encaminhando ao RPC local só os métodos permitidos (RPC_PROXY_ALLOW)
+  rpc-proxy status          estado do contêiner e teste de um método permitido e de um recusado
+  rpc-proxy logs [-f]       logs do proxy
+  rpc-proxy remove          para e remove o proxy
+Plugin de permissionamento on-chain (RBBNet/besu-permissioning-plugin; Besu >= 25.12)
+  plugin install            baixa o jar (PLUGIN_JAR_URL/SHA256 do node.env), troca a imagem do Besu (PLUGIN_BESU_IMAGE)
+                            via docker-compose.override.yml, mantendo chave e banco, e reinicia. Só em nó já sincronizado.
+  plugin status             versão do Besu, registro do plugin no log, Ingress configurados e contadores do plugin
+  plugin remove             remove o override (volta à imagem do .env) e reinicia. Atenção: o banco escrito pela versão
+                            nova pode não ser lido pela antiga; nesse caso é preciso ressincronizar.
+
+Monitoração automática de validators (somente validator; RBBNet/monitoracao-validadores)
+  validator-monitor install   baixa o código (VALIDATOR_MONITOR_REPO@REF do node.env) e sobe o monitor apontando para o RPC local
+  validator-monitor status    estado do contêiner e propostas de voto pendentes no nó (qbft_getPendingVotes)
+  validator-monitor logs [-f] logs do monitor
+  validator-monitor remove    para e remove o monitor (o código fica em ${DATA_MOUNT}/validator-monitor)
+
 Prometheus (somente nós prometheus)
   prometheus clients <arquivo.pem>      instala o bundle de certificados dos demais partícipes e recarrega o NGINX
   prometheus federation <arquivo.json>  substitui os alvos federados (formato file_sd: [{targets:[...],labels:{organization}}])
@@ -54,7 +73,52 @@ USAGE
 }
 
 as_rbb() { sudo -u rbb -H env IMAGE_BESU="${BESU_IMAGE}" RBB_IMAGE="${RBB_CLI_IMAGE}" bash -c "cd '${SN_DIR}' && $*"; }
-need_besu() { [[ "${NODE_TYPE}" != "prometheus" ]] || { echo "comando não se aplica a nós prometheus" >&2; exit 1; }; }
+
+# O template de compose de algumas redes (ex.: participantes/piloto) fixa BESU_PERMISSIONS_*_ENABLED e o nó
+# precisa sobrescrever (observer-boot e observer usam permissionamento local por arquivo). O rbb-cli renderiza
+# as duas definições e o Docker Compose recusa chave duplicada no YAML. Mantém a última ocorrência de cada
+# chave em cada bloco environment:, que é a do nó.
+dedupe_compose() {
+  local f="${SN_DIR}/docker-compose.yml"
+  [[ -f "${f}" ]] || return 0
+  python3 - "${f}" <<'PY'
+import re, sys
+path = sys.argv[1]
+src = open(path).read()
+lines = src.split("\n")
+out = []
+i = 0
+while i < len(lines):
+    m = re.match(r"^(\s*)environment:\s*$", lines[i])
+    if not m:
+        out.append(lines[i]); i += 1; continue
+    base = len(m.group(1)); out.append(lines[i]); i += 1
+    block = []
+    while i < len(lines):
+        l = lines[i]
+        ind = len(l) - len(l.lstrip(" "))
+        if l.strip() != "" and ind <= base:
+            break
+        block.append(l); i += 1
+    # indentação das chaves do bloco = menor indentação entre linhas não vazias
+    inds = [len(l) - len(l.lstrip(" ")) for l in block if l.strip()]
+    kind = min(inds) if inds else None
+    seen, kept = set(), []
+    for l in reversed(block):
+        mk = re.match(r"^(\s+)([A-Za-z_][A-Za-z0-9_]*):", l)
+        if mk and len(mk.group(1)) == kind:
+            if mk.group(2) in seen:
+                continue
+            seen.add(mk.group(2))
+        kept.append(l)
+    out.extend(reversed(kept))
+new = "\n".join(out)
+if new != src:
+    open(path, "w").write(new)
+PY
+}
+
+need_besu() { [[ "${NODE_TYPE}" != "prometheus" && "${NODE_TYPE}" != "app" ]] || { echo "comando não se aplica a nós ${NODE_TYPE}" >&2; exit 1; }; }
 
 pubkey() { need_besu; [[ -f "${PUBKEY_FILE}" ]] || { echo "chave ainda não gerada" >&2; exit 1; }; tr -d '\n' < "${PUBKEY_FILE}"; echo; }
 nodeid() { [[ -f "${NODEID_FILE}" ]] && tr -d '\n' < "${NODEID_FILE}" || true; }
@@ -122,7 +186,7 @@ cmd_address() {
       sed -i "s|^P2P_ADDRESS=.*|P2P_ADDRESS=\"${addr}\"|; s|^P2P_PORT=.*|P2P_PORT=\"${port}\"|" /etc/rbb/node.env
       [[ "${P2P_PUBLIC}" == "true" ]] && sed -i "s|^PUBLIC_IP=.*|PUBLIC_IP=\"${host}\"|" /etc/rbb/node.env
       as_rbb "./rbb-cli config set '$(node_ref).address=\"${addr}\"'" >/dev/null
-      as_rbb "./rbb-cli config render-templates >/dev/null && docker compose down >/dev/null 2>&1; docker compose up -d >/dev/null 2>&1"
+      as_rbb "./rbb-cli config render-templates >/dev/null"; dedupe_compose; as_rbb "docker compose down >/dev/null 2>&1; docker compose up -d >/dev/null 2>&1"
       echo "endereço anunciado: ${addr} (Besu reiniciado). Atualize o nodes.json (rbb-node-info.sh / rbb-publish-nodes.sh)." ;;
     *) usage; exit 1 ;;
   esac
@@ -255,6 +319,153 @@ cmd_prometheus() {
   esac
 }
 
+# Proxy JSON-RPC com lista de métodos permitidos, para aplicações que só precisam ler a cadeia e enviar
+# transações assinadas (sem ADMIN, DEBUG, TRACE, PERM, TXPOOL). Roda em contêiner na rede do host:
+# escuta RPC_PROXY_PORT e encaminha a 127.0.0.1:RPC_PORT. Quem alcança o proxy é decidido no firewall.
+PROXY_DIR="${DATA_MOUNT}/rpc-proxy"
+as_rbb_proxy() { sudo -u rbb -H bash -c "cd '${PROXY_DIR}' && $*"; }
+cmd_rpc_proxy() {
+  need_besu
+  case "${1:-}" in
+    install)
+      local src="${RPC_PROXY_SOURCE:-RBBNet/rbb-iac@main}" port="${RPC_PROXY_PORT:-8546}"
+      local repo="${src%@*}" ref="${src#*@}"
+      mkdir -p "${PROXY_DIR}"
+      echo "baixando tools/rbb-rpc-proxy de ${repo}@${ref}"
+      rm -rf "${PROXY_DIR}/src.new" && mkdir -p "${PROXY_DIR}/src.new"
+      curl -fsSL "https://github.com/${repo}/archive/${ref}.tar.gz" | tar xz -C "${PROXY_DIR}/src.new" --strip-components=3 --wildcards "*/tools/rbb-rpc-proxy/*"
+      [[ -f "${PROXY_DIR}/src.new/main.go" && -f "${PROXY_DIR}/src.new/Dockerfile" ]] || { echo "código do proxy não encontrado em ${repo}@${ref}" >&2; exit 1; }
+      rm -rf "${PROXY_DIR}/src" && mv "${PROXY_DIR}/src.new" "${PROXY_DIR}/src"
+      printf '%s\n' "${src}" > "${PROXY_DIR}/src/.rbb-source"
+      cat > "${PROXY_DIR}/docker-compose.yml" <<COMPOSE
+services:
+  rpc-proxy:
+    build: ./src
+    container_name: rbb-rpc-proxy
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    environment:
+      LISTEN: ":${port}"
+      UPSTREAM: "http://127.0.0.1:${RPC_PORT}"
+      ALLOW: "${RPC_PROXY_ALLOW:-}"
+COMPOSE
+      chown -R rbb:rbb "${PROXY_DIR}"
+      as_rbb_proxy "docker compose up -d --build" 2>&1 | tail -2
+      echo "proxy no ar na porta ${port}: rbb-node rpc-proxy status" ;;
+    status)
+      [[ -f "${PROXY_DIR}/docker-compose.yml" ]] || { echo "proxy não instalado (rbb-node rpc-proxy install)"; exit 1; }
+      echo "código: $(cat "${PROXY_DIR}/src/.rbb-source" 2>/dev/null || echo '?') | porta ${RPC_PROXY_PORT:-8546}"
+      as_rbb_proxy "docker compose ps --format '{{.Name}} {{.Status}}'"
+      local url="http://127.0.0.1:${RPC_PROXY_PORT:-8546}"
+      echo "eth_chainId: $(curl -s -m 5 -X POST -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' "${url}" | jq -c '.result // .error')"
+      echo "admin_peers: $(curl -s -m 5 -X POST -H 'Content-Type: application/json' --data '{"jsonrpc":"2.0","method":"admin_peers","params":[],"id":1}' "${url}" | jq -c '.error.message // .result')" ;;
+    logs)   shift; as_rbb_proxy "docker compose logs $*" ;;
+    remove) [[ -f "${PROXY_DIR}/docker-compose.yml" ]] && as_rbb_proxy "docker compose down"; echo "proxy removido" ;;
+    *) usage; exit 1 ;;
+  esac
+}
+
+# Plugin de permissionamento on-chain. O Besu removeu o permissionamento nativo na 25.6; o plugin da RBB o
+# substitui lendo os mesmos BESU_PERMISSIONS_*_CONTRACT_ADDRESS/VERSION que o compose do start-network já define
+# (as variáveis *_ENABLED, sem opção correspondente na 25.12, são ignoradas). Receita da bancada da RBB
+# (RBBNet/bancada-plugin-permissionamento, T-05/T-11): override do compose com a imagem nova e o jar montado.
+PLUGIN_JAR="${SN_DIR}/plugins/besu-plugin-permissioning.jar"
+PLUGIN_OVERRIDE="${SN_DIR}/docker-compose.override.yml"
+cmd_plugin() {
+  need_besu
+  case "${1:-}" in
+    install)
+      [[ -n "${PLUGIN_JAR_URL:-}" && -n "${PLUGIN_JAR_SHA256:-}" && -n "${PLUGIN_BESU_IMAGE:-}" ]] || { echo "PLUGIN_JAR_URL, PLUGIN_JAR_SHA256 e PLUGIN_BESU_IMAGE precisam estar no /etc/rbb/node.env" >&2; exit 1; }
+      [[ -d "${VOL}/database" ]] || { echo "nó sem banco sincronizado (${VOL}/database): o plugin só é instalado em nó já sincronizado. Sincronize com a imagem padrão antes." >&2; exit 1; }
+      mkdir -p "${SN_DIR}/plugins"
+      echo "baixando ${PLUGIN_JAR_URL}"
+      curl -fsSL -o "${PLUGIN_JAR}.new" "${PLUGIN_JAR_URL}"
+      local sum; sum="$(sha256sum "${PLUGIN_JAR}.new" | cut -d' ' -f1)"
+      [[ "${sum}" == "${PLUGIN_JAR_SHA256}" ]] || { rm -f "${PLUGIN_JAR}.new"; echo "SHA-256 do jar não confere: esperado ${PLUGIN_JAR_SHA256}, obtido ${sum}" >&2; exit 1; }
+      mv -f "${PLUGIN_JAR}.new" "${PLUGIN_JAR}"; chmod 0644 "${PLUGIN_JAR}"; chown -R rbb:rbb "${SN_DIR}/plugins"
+      cat > "${PLUGIN_OVERRIDE}" <<OVERRIDE
+# Gerado por rbb-node plugin install: Besu com o plugin de permissionamento on-chain da RBB.
+# Aplicado automaticamente pelo docker compose junto com docker-compose.yml. Remova com rbb-node plugin remove.
+services:
+  ${NODE_NAME}:
+    image: ${PLUGIN_BESU_IMAGE}
+    volumes:
+      - \${PWD}/plugins/besu-plugin-permissioning.jar:/opt/besu/plugins/besu-plugin-permissioning.jar:ro
+OVERRIDE
+      chown rbb:rbb "${PLUGIN_OVERRIDE}"
+      echo "baixando a imagem ${PLUGIN_BESU_IMAGE}"
+      docker pull -q "${PLUGIN_BESU_IMAGE}" >/dev/null
+      echo "reiniciando o Besu com o plugin (chave e banco mantidos)"
+      as_rbb "./rbb-cli config render-templates >/dev/null && docker compose down && docker compose up -d"
+      echo "feito. Acompanhe com: rbb-node plugin status" ;;
+    status)
+      if [[ -f "${PLUGIN_OVERRIDE}" ]]; then echo "override: $(grep -m1 'image:' "${PLUGIN_OVERRIDE}" | sed 's/^ *//')"; else echo "override: ausente (plugin não instalado)"; fi
+      [[ -f "${PLUGIN_JAR}" ]] && echo "jar: $(sha256sum "${PLUGIN_JAR}" | cut -c1-16)… ($(stat -c %s "${PLUGIN_JAR}") bytes)"
+      echo "besu: $(rpc web3_clientVersion | jq -r '.result // .error')"
+      local logs; logs="$(as_rbb "docker compose logs --no-log-prefix 2>/dev/null" | grep -E 'Registering On-Chain Permissioning Plugin|Ingress Address set to|contract interface version|Could not resolve|Rejecting' | tail -6)"
+      [[ -n "${logs}" ]] && printf '%s\n' "${logs}" | cut -c1-200 | sed 's/^/log: /'
+      curl -s "http://127.0.0.1:${METRICS_PORT}/metrics" 2>/dev/null | grep -E '^besu(_|)permissioning' | sed 's/^/métrica: /' || true ;;
+    remove)
+      [[ -f "${PLUGIN_OVERRIDE}" ]] || { echo "plugin não instalado"; exit 0; }
+      rm -f "${PLUGIN_OVERRIDE}"
+      echo "override removido; reiniciando o Besu com a imagem padrão (${BESU_IMAGE})"
+      as_rbb "./rbb-cli config render-templates >/dev/null && docker compose down && docker compose up -d"
+      echo "se o Besu não subir por incompatibilidade do banco, reinstale o plugin (rbb-node plugin install) ou ressincronize" ;;
+    *) usage; exit 1 ;;
+  esac
+}
+
+# Monitoração automática de validators: cada partícipe roda um agente junto ao seu validator que vota
+# (qbft_proposeValidatorVote) pela exclusão de quem parou de propor blocos. Código de referência da RBB,
+# executado em contêiner Node na rede do host, apontando para o RPC local do validator (único destino válido).
+MON_DIR="${DATA_MOUNT}/validator-monitor"
+as_rbb_mon() { sudo -u rbb -H bash -c "cd '${MON_DIR}' && $*"; }
+cmd_validator_monitor() {
+  [[ "${NODE_TYPE}" == "validator" ]] || { echo "somente para nós validator" >&2; exit 1; }
+  case "${1:-}" in
+    install)
+      local repo="${VALIDATOR_MONITOR_REPO:-RBBNet/monitoracao-validadores}" ref="${VALIDATOR_MONITOR_REF:-main}"
+      local image="${VALIDATOR_MONITOR_IMAGE:-node:24-alpine}"
+      mkdir -p "${MON_DIR}"
+      echo "baixando ${repo}@${ref}"
+      rm -rf "${MON_DIR}/src.new" && mkdir -p "${MON_DIR}/src.new"
+      curl -fsSL "https://github.com/${repo}/archive/${ref}.tar.gz" | tar xz -C "${MON_DIR}/src.new" --strip-components=1
+      [[ -f "${MON_DIR}/src.new/main.js" && -f "${MON_DIR}/src.new/monitoring.js" ]] || { echo "código inesperado em ${repo}@${ref} (sem main.js/monitoring.js)" >&2; exit 1; }
+      rm -rf "${MON_DIR}/src" && mv "${MON_DIR}/src.new" "${MON_DIR}/src"
+      printf '%s@%s\n' "${repo}" "${ref}" > "${MON_DIR}/src/.rbb-source"
+      cat > "${MON_DIR}/docker-compose.yml" <<COMPOSE
+services:
+  monitor:
+    image: ${image}
+    container_name: rbb-validator-monitor
+    network_mode: host
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./src:/app
+    environment:
+      JSON_RPC_URL: http://127.0.0.1:${RPC_PORT}
+      VALIDATOR_MONITORING_BLOCK_INTERVAL: "${VALIDATOR_MONITOR_BLOCK_INTERVAL:-2000}"
+      VALIDATOR_MONITORING_INTERVAL_SECONDS: "${VALIDATOR_MONITOR_INTERVAL_SECONDS:-300}"
+    command: ["node", "main.js"]
+COMPOSE
+      chown -R rbb:rbb "${MON_DIR}"
+      echo "instalando dependências (npm)"
+      as_rbb_mon "docker run --rm -v '${MON_DIR}/src:/app' -w /app '${image}' npm install --omit=dev --no-audit --no-fund --loglevel=error"
+      as_rbb_mon "docker compose up -d --force-recreate"
+      echo "monitor no ar: rbb-node validator-monitor status" ;;
+    status)
+      [[ -f "${MON_DIR}/docker-compose.yml" ]] || { echo "monitor não instalado (rbb-node validator-monitor install)"; exit 1; }
+      echo "código: $(cat "${MON_DIR}/src/.rbb-source" 2>/dev/null || echo '?')"
+      as_rbb_mon "docker compose ps --format '{{.Name}} {{.Status}}'"
+      echo "propostas de voto pendentes neste nó: $(rpc qbft_getPendingVotes | jq -c '.result // .error')" ;;
+    logs)   shift; as_rbb_mon "docker compose logs $*" ;;
+    remove) [[ -f "${MON_DIR}/docker-compose.yml" ]] && as_rbb_mon "docker compose down"; echo "monitor removido" ;;
+    *) usage; exit 1 ;;
+  esac
+}
+
 case "${1:-}" in
   info)      cmd_info ;;
   enode)     shift; cmd_enode "$@" ;;
@@ -264,16 +475,19 @@ case "${1:-}" in
   peers)     shift; cmd_peers "$@" ;;
   bootnodes) shift; cmd_bootnodes "$@" ;;
   genesis)   shift; cmd_genesis "$@" ;;
-  up)        need_besu; as_rbb "./rbb-cli config render-templates >/dev/null && docker compose up -d" ;;
+  up)        need_besu; as_rbb "./rbb-cli config render-templates >/dev/null"; dedupe_compose; as_rbb "docker compose up -d" ;;
   down)      need_besu; as_rbb "docker compose down" ;;
-  restart)   need_besu; as_rbb "./rbb-cli config render-templates >/dev/null && docker compose down && docker compose up -d" ;;
+  restart)   need_besu; as_rbb "./rbb-cli config render-templates >/dev/null"; dedupe_compose; as_rbb "docker compose down && docker compose up -d" ;;
   logs)      need_besu; shift; as_rbb "docker compose logs $*" ;;
   status)    cmd_status ;;
-  render)    need_besu; as_rbb "./rbb-cli config render-templates" ;;
+  render)    need_besu; as_rbb "./rbb-cli config render-templates"; dedupe_compose ;;
   cli)       need_besu; shift; as_rbb "./rbb-cli $*" ;;
   jfr-clean) cmd_jfr_clean ;;
   watchdog)  cmd_watchdog ;;
   prometheus) shift; cmd_prometheus "$@" ;;
+  rpc-proxy) shift; cmd_rpc_proxy "$@" ;;
+  validator-monitor) shift; cmd_validator_monitor "$@" ;;
+  plugin)    shift; cmd_plugin "$@" ;;
   -h|--help|help|"") usage ;;
   *) usage; exit 1 ;;
 esac

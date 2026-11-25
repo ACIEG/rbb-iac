@@ -13,6 +13,8 @@ for f in prometheus.yml rules.yml nginx.conf docker-compose.yml blackbox.yml; do
 done
 # Alvos: sempre reescreve os locais; os federados só na primeira vez (depois via 'rbb-node prometheus federation')
 cp -f /etc/rbb/prometheus/targets/local.json "${PROM_HOME}/targets/local.json"
+[[ -f /etc/rbb/prometheus/targets/apps.json ]] && cp -f /etc/rbb/prometheus/targets/apps.json "${PROM_HOME}/targets/apps.json"
+[[ -f "${PROM_HOME}/targets/apps.json" ]] || printf '[]\n' > "${PROM_HOME}/targets/apps.json"
 [[ -f "${PROM_HOME}/targets/federation.json" ]] || cp /etc/rbb/prometheus/targets/federation.json "${PROM_HOME}/targets/federation.json"
 
 # Certificado autoassinado do servidor (roteiro_prometheus_nginx.md, passo 2). Válido por 2 anos.

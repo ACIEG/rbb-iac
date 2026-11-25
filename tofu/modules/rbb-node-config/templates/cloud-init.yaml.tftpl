@@ -61,6 +61,10 @@ write_files:
     permissions: "0644"
     encoding: gz+b64
     content: ${prometheus_local_targets}
+  - path: /etc/rbb/prometheus/targets/apps.json
+    permissions: "0644"
+    encoding: gz+b64
+    content: ${prometheus_app_targets}
   - path: /etc/rbb/prometheus/targets/federation.json
     permissions: "0644"
     encoding: gz+b64

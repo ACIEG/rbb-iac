@@ -92,7 +92,7 @@ cd rbb-iac
 ./scripts/rbb-ssh.sh testnet validator01 sudo rbb-node status
 ```
 
-O script `rbb-sync-participantes.sh` só considera nós das **outras** organizações com `deploymentStatus = deployed` e `operationalStatus = active`, usando o primeiro IP documentado. Repita-o (e depois `rbb-link-nodes.sh`) sempre que o `nodes.json` mudar.
+O script `rbb-sync-participantes.sh` só considera nós das **outras** organizações com `deploymentStatus = deployed` e `operationalStatus = active`, usando o primeiro IP documentado. Para incluir nós que ainda não estão nesse estado mas já devem ser liberados e cadastrados (migração de VMs de um partícipe, em que os conjuntos antigo e novo coexistem a pedido em issue da RBB), liste-os em `network/include.txt`, um por linha, como `ORGANIZACAO/nome` (ex.: `PRODEMGE/validator02`); remova as linhas quando o partícipe avisar que os nós antigos saíram. Repita o script (e depois `rbb-link-nodes.sh`, e `tofu apply` para o firewall) sempre que o `nodes.json` ou o `include.txt` mudar.
 
 O script `rbb-link-nodes.sh` implementa as regras do roteiro para partícipe associado:
 
@@ -149,6 +149,8 @@ Em qualquer VM, como root (`sudo rbb-node`):
 | `prometheus reload` (após `rbb-update-tools.sh`) | o nó prometheus traz também um blackbox exporter que sonda a porta 8443 de cada parceiro (job `federation-port`) e a aceitação do nosso certificado (job `federation-tls`), gerando os alertas `FederationFirewallClosed` e `FederationCertificateRejected` |
 | `watchdog` | a cada 5 min (cron): reenvia `admin_addPeer` para os peers de `static-nodes.json` que não estão conectados (o Besu 25.5 nem sempre volta a tentar sozinho); reinicia o Besu de forma controlada quando a memória real do contêiner passa de 93% do limite (no máximo 1x a cada 6 h, evitando a morte abrupta pelo kernel); e reinicia se o nó ficar sem nenhum peer em duas verificações seguidas |
 | `jfr-clean` | remove gravações antigas do Java Flight Recorder no `/tmp` do contêiner (o bootstrap instala um cron horário) |
+| `validator-monitor install\|status\|logs\|remove` | monitoração automática de validators (ver abaixo), só em nós validator |
+| `plugin install\|status\|remove` | plugin de permissionamento on-chain (ver abaixo): Besu 25.12 + jar do plugin, mantendo chave e banco |
 | `prometheus clients <pem>` / `prometheus federation <json>` / `prometheus reload` | nós prometheus |
 
 Do lado local, `scripts/rbb-ssh-keys.sh <env> show|set|add|remove` gerencia as chaves SSH autorizadas em todos os nós, e `scripts/rbb-update-tools.sh <env> [--rerun-setup]` envia versões novas do `rbb-node`/bootstrap para as VMs sem recriá-las (o bootstrap é idempotente e migra os dados para o volume caso ele tenha sido anexado depois do primeiro boot).
@@ -158,6 +160,63 @@ O layout na VM é o mesmo do roteiro: `/srv/rbb/start-network/` (rbb-cli, `infra
 ## Grafana
 
 O nó prometheus traz um Grafana em `https://<ip-do-prometheus>/grafana/` (mesmo certificado do NGINX; login próprio, usuário `admin`, senha inicial em `/srv/rbb/prometheus/.grafana-admin-initial`, legível só por root). A fonte de dados e os painéis são provisionados a partir deste repositório (`files/grafana-*`): há dois painéis: **RBB - consenso** (quantos validators o nosso vê, blocos propostos por validator nos últimos 100, nossa fatia e último bloco proposto; alerta `ValidatorNotProposing` quando o nosso validator para de propor) e **RBB - nós e federação**, que mostra distância da ponta, peers, reinícios, altura e memória dos nossos nós, o estado da federação por organização (porta e certificado) e os alertas ativos. Painéis criados pela interface não são versionados; para mudar o padrão, edite o JSON e reenvie com `rbb-update-tools.sh`.
+
+## RPC do writer para aplicações: métodos permitidos e quem chama
+
+O RPC do Besu expõe também ADMIN, DEBUG, TRACE, PERM e TXPOOL, que uma aplicação não deve alcançar. Duas opções no módulo, combináveis por nó:
+
+- `rpc_from_vpc = false` tira a regra que libera a porta RPC para a VPC inteira; só `rpc_cidrs` (e `localhost`, usado pelo exportador, pelo vigia e pelo túnel) alcançam o nó.
+- `rpc_proxy = { enabled = true, from_cidrs = ["10.120.1.71/32"] }` sobe `tools/rbb-rpc-proxy` no nó (contêiner, porta 8546): só os métodos da lista passam ao Besu (padrão: leitura `eth_`/`net_`, `web3_clientVersion` e `eth_sendRawTransaction`), os demais recebem `-32601`, inclusive dentro de lotes. `allow` personaliza a lista; `from_cidrs` nomeia quem pode chamar.
+
+As métricas (9545, 9546 e 9100) ficam liberadas só para o IP do Prometheus da organização, em todos os nós.
+
+```hcl
+writer01 = { type = "writer", public_ip = false, rpc_from_vpc = false,
+             rpc_proxy = { enabled = true, from_cidrs = ["10.120.1.71/32"] } }
+```
+
+Em nó já provisionado: `rbb-update-tools.sh`, variáveis `RPC_PROXY_*` no `/etc/rbb/node.env` e `sudo rbb-node rpc-proxy install`; `rbb-node rpc-proxy status` testa um método permitido e um recusado.
+
+## VM de aplicação (tipo `app`)
+
+Para rodar na mesma sub-rede um serviço da organização que fala com o writer (por exemplo, o processo que envia lotes assinados), o módulo tem o tipo `app`: uma VM sem Besu, sem IP público (sai pelo NAT gateway, com IP fixo), com SSH aceito só a partir do nó de salto, um usuário de serviço sem sudo e sem Docker (`service_user`, com `linger` para serviços `systemctl --user`), `/srv/app` como diretório da aplicação, `node_exporter` na porta 9100 liberada só para o Prometheus da organização (job `app`) e correções de segurança automáticas sem reinício automático.
+
+```hcl
+nodes = {
+  app01 = { type = "app", machine_type = "BV1-2-20", public_ip = false, service_user = "operador" }
+## Plugin de permissionamento on-chain
+
+O Besu removeu o permissionamento on-chain nativo na 25.6.0; a RBB o substitui pelo [besu-permissioning-plugin](https://github.com/RBBNet/besu-permissioning-plugin) (Besu 25.12+), que valida transações e conexões consultando os mesmos contratos gen02. A RBB pede a implantação em todos os nós ([RBBNet/rbb#221](https://github.com/RBBNet/rbb/issues/221)). A variável `permissioning_plugin` fixa a imagem do Besu (por digest), a URL do jar do release e o seu SHA-256; `enabled` liga o plugin em todos os nós, e `nodes[*].permissioning_plugin` liga ou desliga por nó, para migrar um de cada vez:
+
+```hcl
+nodes = {
+  observer01 = { type = "observer", permissioning_plugin = true }
+  ...
+}
+```
+
+Deploy e acesso: SSH pelo nó de salto (`rbb-ssh.sh <env> app01`), chaves gerenciadas por `rbb-ssh-keys.sh`. O RPC do writer fica em `<ip privado do writer>:8545` dentro da VPC. Segredos da aplicação: arquivo `0600` do usuário de serviço ou `LoadCredential` do systemd.
+A instalação (`rbb-node plugin install`, feita pelo bootstrap quando habilitada) segue a receita da [bancada de testes da RBB](https://github.com/RBBNet/bancada-plugin-permissionamento): baixa o jar e confere o hash, escreve um `docker-compose.override.yml` ao lado do compose do start-network trocando a imagem e montando o jar em `/opt/besu/plugins`, e reinicia o Besu mantendo chave e banco. As variáveis `BESU_PERMISSIONS_*_CONTRACT_ADDRESS/VERSION` que o plugin lê já vêm do compose da RBB. Em um nó já provisionado: `rbb-update-tools.sh`, variáveis `PLUGIN_*` no `/etc/rbb/node.env` e `sudo rbb-node plugin install`; `rbb-node plugin status` mostra a versão do Besu, o registro do plugin, os Ingress resolvidos e os contadores de permissões/recusas.
+
+O `v1.0.0-rc.1` tinha um defeito grave: ao falhar uma simulação na troca de bloco, guardava um endereço zero como contrato de regras e passava a recusar todas as conexões até importar um bloco novo, o que nunca acontece sem peers; o validator ficava isolado até ser removido do consenso. O `v1.0.0-rc.2` (30/10/2026) consulta o Ingress a cada verificação, sem essa cache, e corrige a entrada de nós novos e a queda de peers durante a sincronização (issues 2 e 8). Mesmo assim, o plugin só é instalado em nó com banco já sincronizado, e uma VM recriada sobe com a imagem padrão até sincronizar. A volta à imagem anterior (`plugin remove`) não é garantida: o banco escrito pela versão nova pode não ser lido pela antiga.
+
+## Monitoração automática de validators
+
+A RBB espera que cada partícipe rode, junto ao seu validator, o agente de referência [RBBNet/monitoracao-validadores](https://github.com/RBBNet/monitoracao-validadores): a cada 5 minutos ele consulta `qbft_getSignerMetrics` dos últimos 2000 blocos e vota (`qbft_proposeValidatorVote`) pela exclusão de quem não propôs nenhum bloco, sem deixar a rede abaixo de 4 validators. Como a proposta de voto fica registrada no nó até ser descartada ou até o Besu reiniciar, e o Besu a reemite a cada época, o agente deve também descartar as propostas já cumpridas (há PR para isso no repositório de referência).
+
+Para ativar, na variável `validator_monitor` do ambiente:
+
+```hcl
+validator_monitor = {
+  enabled = true
+  # repo = "RBBNet/monitoracao-validadores"   # owner/repo no GitHub
+  # ref  = "main"                             # branch, tag ou commit
+}
+```
+
+O bootstrap instala o monitor nos nós validator como contêiner Node (`node:24-alpine`) na rede do host, apontando para o RPC local do validator, que é o único destino válido (apontar para boot, writer ou observer não produz voto). Em um validator já provisionado, envie o `rbb-node` novo com `rbb-update-tools.sh`, acrescente as variáveis `VALIDATOR_MONITOR_*` ao `/etc/rbb/node.env` e rode `sudo rbb-node validator-monitor install`. `rbb-node validator-monitor status` mostra o contêiner e as propostas de voto pendentes no nó.
+
+Esse mecanismo vale enquanto a rede usar a seleção de validators por votação nos cabeçalhos (modo `blockheader` do QBFT). A RBB prepara a [seleção de validators on-chain](https://github.com/RBBNet/selecao-validadores), com um agente diferente; quando a transição ocorrer, este componente será substituído.
 
 ## Armazenamento do Besu: Bonsai ou Forest
 
@@ -234,6 +293,9 @@ dotswap restore                               # num clone novo: traz tudo de vol
 O uso do dotswap é opcional; qualquer gerenciador de segredos serve, desde que os arquivos listados no `.dotswap.json` nunca entrem no git.
 
 ## Segurança
+
+Mitigação temporária para vulnerabilidade na JVM do Besu sem imagem corrigida: `observer_boot_p2p_public = false` fecha o P2P dos observer-boots para a VPC (o único ponto onde a JVM fica aberta à internet; boot e validator já aceitam só parceiros, e RPC e métricas não são públicos; parceiros não se conectam ao observer-boot de outra organização). Só regra de firewall, sem reinício; reverter quando a correção for aplicada.
+
 
 - SSH restrito a `admin_ssh_cidrs`; nunca use `0.0.0.0/0`.
 - **Separe titularidade de operação.** A conta na nuvem, o estado do OpenTofu e uma chave SSH institucional (`ssh_authorized_keys`) devem ficar com a organização titular dos nós; o operador técnico usa chave própria e uma API key própria, ambas revogáveis. `scripts/rbb-ssh-keys.sh <env> remove <comentário-da-chave>` revoga um acesso em todos os nós em segundos, sem recriar nada.

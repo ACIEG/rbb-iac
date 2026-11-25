@@ -6,14 +6,14 @@ locals {
   # IP privado fixo por nó, derivado do tipo e do sequencial (boot01 = .11, validator02 = .22,
   # writer01 = .31, observer-boot01 = .41, observer01 = .51, prometheus01 = .61). Não depende de
   # quais outros nós existem: adicionar ou remover um nó nunca altera o IP dos demais.
-  type_ip_base = { boot = 10, validator = 20, writer = 30, "observer-boot" = 40, observer = 50, prometheus = 60 }
+  type_ip_base = { boot = 10, validator = 20, writer = 30, "observer-boot" = 40, observer = 50, prometheus = 60, app = 70 }
   private_ips = {
     for k, n in var.nodes : k => cidrhost(var.subnet_cidr, coalesce(n.private_ip_offset, local.type_ip_base[n.type] + tonumber(regex("[0-9]{2}$", k))))
   }
 
   public_nodes = { for k, n in var.nodes : k => n if n.public_ip }
-  besu_nodes   = { for k, n in var.nodes : k => n if n.type != "prometheus" }
-  volume_nodes = { for k, n in var.nodes : k => n if coalesce(n.data_volume_size, n.type == "prometheus" ? 0 : var.default_data_volume_size) > 0 }
+  besu_nodes   = { for k, n in var.nodes : k => n if !contains(["prometheus", "app"], n.type) }
+  volume_nodes = { for k, n in var.nodes : k => n if coalesce(n.data_volume_size, contains(["prometheus", "app"], n.type) ? 0 : var.default_data_volume_size) > 0 }
 
   protect_data_volumes = coalesce(var.protect_data_volumes, var.rbb_network == "piloto")
 
@@ -28,6 +28,18 @@ locals {
       port = n.metrics_port
     }
   ]
+  # VMs de aplicação (tipo app): node_exporter na porta 9100, coletado pelo job "app"
+  app_targets = [
+    for k, n in var.nodes : {
+      name = k
+      ip   = local.private_ips[k]
+      port = 9100
+    } if n.type == "app"
+  ]
+  prometheus_private_cidrs = [for k, n in var.nodes : "${local.private_ips[k]}/32" if n.type == "prometheus"]
+  # Nó de salto (bastion): primeiro nó com IP público em ordem alfabética (mesmo critério de bastion_ip)
+  bastion_node       = [for k in sort(keys(var.nodes)) : k if var.nodes[k].public_ip]
+  bastion_private_ip = length(local.bastion_node) > 0 ? local.private_ips[local.bastion_node[0]] : null
 }
 
 # ---------------------------------------------------------------------------
@@ -50,18 +62,22 @@ module "node_config" {
     rpc_public   = each.value.rpc_public
     archive      = each.value.archive
     extra_env    = each.value.extra_env
+    service_user = each.value.service_user
+    rpc_from_vpc = each.value.rpc_from_vpc
+    rpc_proxy    = each.value.rpc_proxy
   }
 
   private_ip = local.private_ips[each.key]
   public_ip  = each.value.public_ip ? mgc_network_public_ips.this[each.key].public_ip : null
   vpc_cidr   = var.vpc_cidr
 
-  ssh_authorized_keys = var.ssh_authorized_keys
-  admin_ssh_cidrs     = var.admin_ssh_cidrs
-  participant_cidrs   = var.participant_cidrs
-  peer_cidrs          = var.peer_cidrs
-  rpc_cidrs           = var.rpc_cidrs
-  hostname_public     = var.dns_domain != null && each.value.public_ip ? "rbb-${each.key}.${var.dns_domain}" : null
+  ssh_authorized_keys      = var.ssh_authorized_keys
+  admin_ssh_cidrs          = var.admin_ssh_cidrs
+  participant_cidrs        = var.participant_cidrs
+  peer_cidrs               = var.peer_cidrs
+  observer_boot_p2p_public = var.observer_boot_p2p_public
+  rpc_cidrs                = var.rpc_cidrs
+  hostname_public          = var.dns_domain != null && each.value.public_ip ? "rbb-${each.key}.${var.dns_domain}" : null
 
   genesis_json          = var.genesis_json
   compose_template      = var.compose_template
@@ -71,9 +87,17 @@ module "node_config" {
   container_memory      = coalesce(each.value.container_memory, var.container_memory)
   jvm_heap              = each.value.jvm_heap
   data_volume           = contains(keys(local.volume_nodes), each.key)
+  validator_monitor     = var.validator_monitor
+  permissioning_plugin  = merge(var.permissioning_plugin, { enabled = coalesce(each.value.permissioning_plugin, var.permissioning_plugin.enabled) })
 
   prometheus_targets            = each.value.type == "prometheus" ? local.prometheus_targets : []
   prometheus_federation_targets = each.value.type == "prometheus" ? var.prometheus_federation_targets : []
+  prometheus_app_targets        = each.value.type == "prometheus" ? local.app_targets : []
+
+  # VM de aplicação: SSH só a partir do nó de salto; métricas só para o Prometheus da organização
+  ssh_cidrs_override = each.value.type == "app" && local.bastion_private_ip != null ? ["${local.bastion_private_ip}/32"] : null
+  # Métricas (Besu, exportador, node_exporter) só para o Prometheus da organização, em todos os nós
+  metrics_from_cidrs = length(local.prometheus_private_cidrs) > 0 ? local.prometheus_private_cidrs : null
 }
 
 # ---------------------------------------------------------------------------

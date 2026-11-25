@@ -1,5 +1,6 @@
 locals {
-  is_besu = var.node.type != "prometheus"
+  is_besu = !contains(["prometheus", "app"], var.node.type)
+  is_app  = var.node.type == "app"
 
   organization_name = coalesce(var.organization_name, upper(var.organization))
 
@@ -33,18 +34,19 @@ locals {
   # A VPC entra sempre: as conexões internas da organização (writer -> boot, validator -> boot,
   # observer-boot -> boot, observer -> observer-boot) usam IP interno (roteiro, passo 9).
   p2p_cidrs = distinct(concat([var.vpc_cidr], (
-    var.node.type == "observer-boot" ? ["0.0.0.0/0"] :
+    var.node.type == "observer-boot" ? (var.observer_boot_p2p_public ? ["0.0.0.0/0"] : []) :
     !local.p2p_public ? [] :
     var.node.type == "validator" ? local.peer_cidrs.validator :
     var.node.type == "boot" ? local.peer_cidrs.boot :
     var.participant_cidrs # writer de parceiro (p2p_public = true): boots das outras organizações
   )))
 
-  rpc_cidrs = distinct(concat([var.vpc_cidr], var.rpc_cidrs, var.node.rpc_public ? ["0.0.0.0/0"] : []))
+  rpc_cidrs    = distinct(concat(var.node.rpc_from_vpc ? [var.vpc_cidr] : [], var.rpc_cidrs, var.node.rpc_public ? ["0.0.0.0/0"] : []))
+  metrics_from = coalesce(var.metrics_from_cidrs, [var.vpc_cidr])
 
   # SSH: dos administradores e de dentro da VPC (salto por um nó com IP público para nós privados)
   ssh_rules = [
-    for cidr in distinct(concat(var.admin_ssh_cidrs, [var.vpc_cidr])) : {
+    for cidr in(var.ssh_cidrs_override != null ? var.ssh_cidrs_override : distinct(concat(var.admin_ssh_cidrs, [var.vpc_cidr]))) : {
       key         = "ssh-${cidr}"
       description = "SSH administrativo"
       direction   = "ingress"
@@ -93,24 +95,34 @@ locals {
         cidr        = cidr
       }
     ],
-    [
-      {
-        key         = "metrics-vpc"
+    flatten([
+      for cidr in local.metrics_from : [{
+        key         = "metrics-${cidr}"
         description = "Metricas Besu para o Prometheus da organizacao"
         direction   = "ingress"
         protocol    = "tcp"
         port_min    = var.node.metrics_port
         port_max    = var.node.metrics_port
-        cidr        = var.vpc_cidr
-      },
-      {
-        key         = "exporter-vpc"
+        cidr        = cidr
+        }, {
+        key         = "exporter-${cidr}"
         description = "Exportador rbb-peers (peers, disco, memoria) para o Prometheus da organizacao"
         direction   = "ingress"
         protocol    = "tcp"
         port_min    = 9546
         port_max    = 9546
-        cidr        = var.vpc_cidr
+        cidr        = cidr
+      }]
+    ]),
+    [
+      for cidr in var.node.rpc_proxy.enabled ? var.node.rpc_proxy.from_cidrs : [] : {
+        key         = "rpc-proxy-${cidr}"
+        description = "Proxy JSON-RPC com metodos permitidos (rbb-rpc-proxy)"
+        direction   = "ingress"
+        protocol    = "tcp"
+        port_min    = var.node.rpc_proxy.port
+        port_max    = var.node.rpc_proxy.port
+        cidr        = cidr
       }
     ]
   ) : []
@@ -163,7 +175,20 @@ locals {
     }
   ]
 
-  firewall_rules = concat(local.ssh_rules, local.besu_rules, local.prometheus_rules, local.egress_rules)
+  # VM de aplicação: só o node_exporter (9100) para o Prometheus da organização
+  app_rules = local.is_app ? [
+    for cidr in local.metrics_from : {
+      key         = "node-exporter-${cidr}"
+      description = "node_exporter da VM de aplicacao para o Prometheus da organizacao"
+      direction   = "ingress"
+      protocol    = "tcp"
+      port_min    = 9100
+      port_max    = 9100
+      cidr        = cidr
+    }
+  ] : []
+
+  firewall_rules = concat(local.ssh_rules, local.besu_rules, local.prometheus_rules, local.app_rules, local.egress_rules)
 
   node_env = {
     NODE_NAME             = var.node.name
@@ -189,6 +214,23 @@ locals {
     DATA_VOLUME           = var.data_volume
     HAS_GENESIS           = var.genesis_json != null
     ARCHIVE               = var.node.archive
+    APP_SERVICE_USER      = var.node.service_user == null ? "" : var.node.service_user
+    RPC_PROXY_ENABLED     = var.node.rpc_proxy.enabled
+    RPC_PROXY_PORT        = var.node.rpc_proxy.port
+    RPC_PROXY_ALLOW       = join(",", var.node.rpc_proxy.allow)
+    RPC_PROXY_SOURCE      = var.node.rpc_proxy.source
+    # Monitoração automática de validators (só tem efeito em nós validator; ver rbb-node validator-monitor)
+    VALIDATOR_MONITOR_ENABLED          = var.validator_monitor.enabled
+    VALIDATOR_MONITOR_REPO             = var.validator_monitor.repo
+    VALIDATOR_MONITOR_REF              = var.validator_monitor.ref
+    VALIDATOR_MONITOR_BLOCK_INTERVAL   = var.validator_monitor.block_interval
+    VALIDATOR_MONITOR_INTERVAL_SECONDS = var.validator_monitor.interval_seconds
+    VALIDATOR_MONITOR_IMAGE            = var.validator_monitor.image
+    # Plugin de permissionamento (ver rbb-node plugin)
+    PLUGIN_ENABLED    = var.permissioning_plugin.enabled
+    PLUGIN_BESU_IMAGE = var.permissioning_plugin.besu_image
+    PLUGIN_JAR_URL    = var.permissioning_plugin.jar_url
+    PLUGIN_JAR_SHA256 = var.permissioning_plugin.jar_sha256
   }
 
   node_env_file = join("\n", concat(
@@ -212,6 +254,12 @@ locals {
       labels  = { organization = f.organization }
     }
   ])
+  prometheus_app_targets = jsonencode([
+    for t in var.prometheus_app_targets : {
+      targets = ["${t.ip}:${t.port}"]
+      labels  = { node = t.name, organization = local.organization_name, network = "rbb${var.rbb_network == "lab" ? "-lab" : ""}" }
+    }
+  ])
 
   user_data = templatefile("${path.module}/templates/cloud-init.yaml.tftpl", {
     hostname                      = local.hostname
@@ -227,6 +275,7 @@ locals {
     prometheus_rules              = base64gzip(file("${path.module}/files/prometheus-rules.yml"))
     prometheus_local_targets      = base64gzip(local.prometheus_local_targets)
     prometheus_federation_targets = base64gzip(local.prometheus_federation_targets)
+    prometheus_app_targets        = base64gzip(local.prometheus_app_targets)
     prometheus_nginx              = base64gzip(file("${path.module}/files/prometheus-nginx.conf"))
     prometheus_setup              = base64gzip(file("${path.module}/files/prometheus-setup.sh"))
     prometheus_docker             = base64gzip(file("${path.module}/files/prometheus-compose.yml"))

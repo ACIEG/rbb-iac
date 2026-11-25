@@ -234,6 +234,8 @@ configure_node() {
   chown -R "${RBB_USER}:${RBB_USER}" "${SN_DIR}"
 
   as_rbb "./rbb-cli config render-templates" >/dev/null
+  # Remove chaves duplicadas no environment (template da rede x sobrescritas do nó); ver rbb-node dedupe_compose
+  /usr/local/bin/rbb-node render >/dev/null 2>&1 || true
 }
 
 # ---------------------------------------------------------------------------
@@ -256,6 +258,26 @@ CRON
   # Vigia de peers: a cada 5 min; reinicia o Besu se ficar sem peers em 2 verificações seguidas (ver rbb-node watchdog)
   printf '*/5 * * * * root /usr/local/bin/rbb-node watchdog >/dev/null 2>&1\n' > /etc/cron.d/rbb-watchdog
   chmod 0644 /etc/cron.d/rbb-watchdog
+  # Proxy JSON-RPC com métodos permitidos (opcional; ver rbb-node rpc-proxy)
+  if [[ "${RPC_PROXY_ENABLED:-false}" == "true" ]]; then
+    log "instalando o proxy JSON-RPC (${RPC_PROXY_SOURCE:-RBBNet/rbb-iac@main}, porta ${RPC_PROXY_PORT:-8546})"
+    /usr/local/bin/rbb-node rpc-proxy install || log "rpc-proxy: falha na instalação (rode 'rbb-node rpc-proxy install' depois)"
+  fi
+  # Plugin de permissionamento (opcional; ver rbb-node plugin). Só em nó com banco já sincronizado:
+  # um nó novo com o plugin não sincroniza do gênesis, então o bootstrap de uma VM nova sobe com a imagem padrão.
+  if [[ "${PLUGIN_ENABLED:-false}" == "true" ]]; then
+    if [[ -d "${SN_DIR}/volumes/${NODE_NAME}/database" && ! -f "${SN_DIR}/docker-compose.override.yml" ]]; then
+      log "instalando o plugin de permissionamento (${PLUGIN_BESU_IMAGE})"
+      /usr/local/bin/rbb-node plugin install || log "plugin: falha na instalação (rode 'rbb-node plugin install' depois)"
+    elif [[ ! -d "${SN_DIR}/volumes/${NODE_NAME}/database" ]]; then
+      log "plugin habilitado, mas o nó ainda não tem banco: sincronize com a imagem padrão e rode 'rbb-node plugin install'"
+    fi
+  fi
+  # Monitoração automática de validators (opcional; ver rbb-node validator-monitor)
+  if [[ "${NODE_TYPE}" == "validator" && "${VALIDATOR_MONITOR_ENABLED:-false}" == "true" ]]; then
+    log "instalando a monitoração automática de validators (${VALIDATOR_MONITOR_REPO:-RBBNet/monitoracao-validadores}@${VALIDATOR_MONITOR_REF:-main})"
+    /usr/local/bin/rbb-node validator-monitor install || log "monitoração de validators: falha na instalação (rode 'rbb-node validator-monitor install' depois)"
+  fi
 }
 
 # Exportador de peers/disco/memória (porta 9546, só VPC) para o Prometheus da organização.
@@ -284,10 +306,38 @@ write_node_info() {
   chown "${RBB_USER}:${RBB_USER}" "${DATA_MOUNT}/node-info.json" 2>/dev/null || true
 }
 
+# VM de aplicação (tipo app): sem Besu. Usuário de serviço sem sudo e sem docker (pode usar serviços
+# de usuário do systemd, com linger), node_exporter na 9100 para o Prometheus da organização e
+# atualizações de segurança automáticas sem reinício automático.
+setup_app_host() {
+  local user="${APP_SERVICE_USER:-app}"
+  if ! id "${user}" >/dev/null 2>&1; then
+    useradd --create-home --shell /bin/bash "${user}"
+    log "usuário de serviço ${user} criado (sem sudo, sem docker)"
+  fi
+  mkdir -p /srv/app && chown "${user}:${user}" /srv/app
+  loginctl enable-linger "${user}" >/dev/null 2>&1 || true
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -q prometheus-node-exporter unattended-upgrades >/dev/null
+  systemctl enable --now prometheus-node-exporter >/dev/null 2>&1
+  cat > /etc/apt/apt.conf.d/52-rbb-unattended <<APT
+// Gerado pelo bootstrap do rbb-iac: só correções de segurança, sem reinício automático
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+Unattended-Upgrade::Automatic-Reboot "false";
+APT
+  systemctl enable --now unattended-upgrades >/dev/null 2>&1 || true
+  log "VM de aplicação pronta: usuário ${user}, /srv/app, node_exporter 9100, atualizações de segurança automáticas"
+}
+
 main() {
   log "bootstrap ${NODE_NAME} (${NODE_TYPE}) org=${ORGANIZATION} rede=${RBB_NETWORK}"
   install_docker
   mount_data_volume
+  if [[ "${NODE_TYPE}" == "app" ]]; then
+    setup_app_host
+    log "bootstrap concluído"
+    return
+  fi
   create_user
   install_start_network
   if [[ "${NODE_TYPE}" == "prometheus" ]]; then
