@@ -42,11 +42,12 @@ module "rbb" {
 
   nodes = var.nodes
 
-  admin_ssh_cidrs   = var.admin_ssh_cidrs
-  participant_cidrs = var.participant_cidrs
-  peer_cidrs        = local.peer_cidrs
-  rpc_cidrs         = var.rpc_cidrs
-  dns_domain        = var.dns_domain
+  admin_ssh_cidrs          = var.admin_ssh_cidrs
+  participant_cidrs        = var.participant_cidrs
+  peer_cidrs               = local.peer_cidrs
+  observer_boot_p2p_public = var.observer_boot_p2p_public
+  rpc_cidrs                = var.rpc_cidrs
+  dns_domain               = var.dns_domain
 
   genesis_json          = local.genesis_json
   compose_template      = local.compose_template

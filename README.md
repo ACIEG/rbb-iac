@@ -294,6 +294,9 @@ O uso do dotswap é opcional; qualquer gerenciador de segredos serve, desde que 
 
 ## Segurança
 
+Mitigação temporária para vulnerabilidade na JVM do Besu sem imagem corrigida: `observer_boot_p2p_public = false` fecha o P2P dos observer-boots para a VPC (o único ponto onde a JVM fica aberta à internet; boot e validator já aceitam só parceiros, e RPC e métricas não são públicos; parceiros não se conectam ao observer-boot de outra organização). Só regra de firewall, sem reinício; reverter quando a correção for aplicada.
+
+
 - SSH restrito a `admin_ssh_cidrs`; nunca use `0.0.0.0/0`.
 - **Separe titularidade de operação.** A conta na nuvem, o estado do OpenTofu e uma chave SSH institucional (`ssh_authorized_keys`) devem ficar com a organização titular dos nós; o operador técnico usa chave própria e uma API key própria, ambas revogáveis. `scripts/rbb-ssh-keys.sh <env> remove <comentário-da-chave>` revoga um acesso em todos os nós em segundos, sem recriar nada.
 - A porta RPC de boot, validator, writer e observer nunca é pública (o módulo rejeita `rpc_public` fora de observer-boot). Aplicações acessam o writer pela VPC ou por `rpc_cidrs`.

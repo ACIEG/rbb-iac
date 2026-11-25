@@ -34,7 +34,7 @@ locals {
   # A VPC entra sempre: as conexões internas da organização (writer -> boot, validator -> boot,
   # observer-boot -> boot, observer -> observer-boot) usam IP interno (roteiro, passo 9).
   p2p_cidrs = distinct(concat([var.vpc_cidr], (
-    var.node.type == "observer-boot" ? ["0.0.0.0/0"] :
+    var.node.type == "observer-boot" ? (var.observer_boot_p2p_public ? ["0.0.0.0/0"] : []) :
     !local.p2p_public ? [] :
     var.node.type == "validator" ? local.peer_cidrs.validator :
     var.node.type == "boot" ? local.peer_cidrs.boot :
