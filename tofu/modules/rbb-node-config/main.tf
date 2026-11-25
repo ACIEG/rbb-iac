@@ -219,6 +219,18 @@ locals {
     RPC_PROXY_PORT        = var.node.rpc_proxy.port
     RPC_PROXY_ALLOW       = join(",", var.node.rpc_proxy.allow)
     RPC_PROXY_SOURCE      = var.node.rpc_proxy.source
+    # Monitoração automática de validators (só tem efeito em nós validator; ver rbb-node validator-monitor)
+    VALIDATOR_MONITOR_ENABLED          = var.validator_monitor.enabled
+    VALIDATOR_MONITOR_REPO             = var.validator_monitor.repo
+    VALIDATOR_MONITOR_REF              = var.validator_monitor.ref
+    VALIDATOR_MONITOR_BLOCK_INTERVAL   = var.validator_monitor.block_interval
+    VALIDATOR_MONITOR_INTERVAL_SECONDS = var.validator_monitor.interval_seconds
+    VALIDATOR_MONITOR_IMAGE            = var.validator_monitor.image
+    # Plugin de permissionamento (ver rbb-node plugin)
+    PLUGIN_ENABLED    = var.permissioning_plugin.enabled
+    PLUGIN_BESU_IMAGE = var.permissioning_plugin.besu_image
+    PLUGIN_JAR_URL    = var.permissioning_plugin.jar_url
+    PLUGIN_JAR_SHA256 = var.permissioning_plugin.jar_sha256
   }
 
   node_env_file = join("\n", concat(

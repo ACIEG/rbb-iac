@@ -105,7 +105,7 @@ variable "nodes" {
     Campos opcionais por nó: machine_type, data_volume_size (0 = sem volume extra), public_ip (padrão true),
     p2p_public (padrão: true para boot/validator/observer-boot, false para writer), rpc_public, p2p_port, rpc_port,
     metrics_port, extra_env (BESU_*), container_cpus, container_memory, private_ip_offset (host fixo na sub-rede;
-    padrão: base do tipo + sequencial, ex.: validator01 = .21).
+    padrão: base do tipo + sequencial, ex.: validator01 = .21), permissioning_plugin (liga o plugin neste nó).
   EOT
   type = map(object({
     type              = string
@@ -136,6 +136,8 @@ variable "nodes" {
       allow      = optional(list(string), [])              # métodos permitidos; vazio = padrão do proxy (leitura eth_/net_ + eth_sendRawTransaction)
       source     = optional(string, "RBBNet/rbb-iac@main") # owner/repo@ref de onde o código do proxy é baixado
     }), {})
+    # Liga/desliga o plugin de permissionamento neste nó (nulo = permissioning_plugin.enabled)
+    permissioning_plugin = optional(bool)
   }))
   validation {
     condition     = alltrue([for n in var.nodes : !coalesce(n.p2p_public, contains(["boot", "validator", "observer-boot"], n.type)) || n.public_ip])
@@ -235,4 +237,39 @@ variable "prometheus_federation_targets" {
     target       = string
   }))
   default = []
+}
+
+variable "validator_monitor" {
+  description = <<-EOT
+    Monitoração automática de validators (RBBNet/monitoracao-validadores), instalada nos nós validator quando enabled = true.
+    A cada interval_seconds consulta qbft_getSignerMetrics dos últimos block_interval blocos no próprio validator e vota
+    (qbft_proposeValidatorVote) pela exclusão de quem não propôs nenhum bloco, como a rede espera de cada partícipe.
+    repo é owner/repo no GitHub e ref uma branch, tag ou commit (o código é baixado como tarball, sem git).
+  EOT
+  type = object({
+    enabled          = optional(bool, false)
+    repo             = optional(string, "RBBNet/monitoracao-validadores")
+    ref              = optional(string, "main")
+    block_interval   = optional(number, 2000)
+    interval_seconds = optional(number, 300)
+    image            = optional(string, "node:24-alpine")
+  })
+  default = {}
+}
+
+variable "permissioning_plugin" {
+  description = <<-EOT
+    Plugin de permissionamento on-chain da RBB (RBBNet/besu-permissioning-plugin), que substitui o permissionamento
+    nativo removido do Besu a partir da 25.6. Versões fixadas: imagem do Besu compatível, URL do jar do release e seu SHA-256.
+    enabled liga o plugin nos nós (pode ser sobreposto por nó em nodes[*].permissioning_plugin). A instalação troca a
+    imagem do Besu e monta o jar via docker-compose.override.yml, mantendo chave e banco (rbb-node plugin install).
+    Só para nós já sincronizados: um nó novo sobe com a imagem padrão e recebe o plugin depois de sincronizar.
+  EOT
+  type = object({
+    enabled    = optional(bool, false)
+    besu_image = optional(string, "hyperledger/besu:25.12.0@sha256:4ef9e934bb321d916ff245981fd65100dc41446b26b2bed47a2b7d09139a3cbe")
+    jar_url    = optional(string, "https://github.com/RBBNet/besu-permissioning-plugin/releases/download/v1.0.0-rc.2/besu-plugin-permissioning.jar")
+    jar_sha256 = optional(string, "adcf767aa6583877b123a6f726757123d50200b202ab83ea403591e10ea9deed")
+  })
+  default = {}
 }
